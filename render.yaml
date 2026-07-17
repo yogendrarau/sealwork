@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: sealwork-signal
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node signal.js
