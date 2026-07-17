@@ -1,0 +1,1187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sealwork — Naruto Sign Recognizer</title>
+<style>
+  :root{
+    --ink:#0b0e13;          /* near-black sumi ink */
+    --ink-2:#141a23;        /* raised panel */
+    --paper:#e8e2d4;        /* aged scroll */
+    --paper-dim:#9aa0a8;
+    --vermilion:#e2483d;    /* hanko seal red */
+    --vermilion-deep:#a8281f;
+    --jade:#3fb98a;         /* success / chakra */
+    --gold:#d9a441;
+    --line:#252d38;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--ink);color:var(--paper);
+    font-family:"Hiragino Mincho ProN","Yu Mincho",Georgia,"Times New Roman",serif;}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px;}
+
+  header{display:flex;align-items:baseline;gap:16px;border-bottom:1px solid var(--line);
+    padding-bottom:14px;margin-bottom:22px;}
+  .mark{font-size:30px;letter-spacing:.18em;font-weight:700;color:var(--paper);}
+  .mark b{color:var(--vermilion);}
+  .sub{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;
+    letter-spacing:.28em;text-transform:uppercase;color:var(--paper-dim);}
+
+  .stage{display:grid;grid-template-columns:1.4fr .9fr;gap:18px;}
+  @media(max-width:760px){.stage{grid-template-columns:1fr}}
+
+  .videobox{position:relative;background:#000;border:1px solid var(--line);
+    border-radius:10px;overflow:hidden;aspect-ratio:4/3;}
+  video,canvas.overlay{position:absolute;inset:0;width:100%;height:100%;
+    object-fit:cover;}
+  video{transform:scaleX(-1);}          /* selfie display only */
+  canvas.overlay{pointer-events:none}   /* landmarks arrive already mirrored */
+
+  .readout{background:var(--ink-2);border:1px solid var(--line);border-radius:10px;
+    padding:20px;display:flex;flex-direction:column;}
+  .nowlabel{font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.24em;
+    text-transform:uppercase;color:var(--paper-dim);}
+  .sign{font-size:54px;line-height:1.05;font-weight:700;margin:6px 0 2px;
+    text-transform:capitalize;}
+  .sign.idle{color:var(--paper-dim);}
+  .sign.live{color:var(--jade);}
+  .conf{font-family:ui-monospace,monospace;font-size:13px;color:var(--paper-dim);}
+  .bar{height:6px;background:#0c1117;border-radius:3px;margin-top:10px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--vermilion),var(--gold));
+    transition:width .08s linear}
+
+  .hands{margin-top:16px;font-family:ui-monospace,monospace;font-size:12px;
+    color:var(--paper-dim);letter-spacing:.04em}
+  .hands b{color:var(--paper)}
+
+  .ranks{margin-top:auto;padding-top:16px;border-top:1px solid var(--line)}
+  .rk{display:flex;justify-content:space-between;font-family:ui-monospace,monospace;
+    font-size:12px;padding:3px 0;color:var(--paper-dim)}
+  .rk span:first-child{text-transform:capitalize}
+  .rk.lead span{color:var(--paper)}
+
+  .status{margin-top:18px;font-family:ui-monospace,monospace;font-size:12px;
+    color:var(--paper-dim);min-height:18px}
+  .status.err{color:var(--vermilion)}
+  .status.ok{color:var(--jade)}
+
+  button{font:inherit;background:var(--vermilion);color:#fff;border:0;
+    padding:11px 20px;border-radius:8px;letter-spacing:.08em;cursor:pointer;
+    font-size:14px;margin-top:18px}
+  button:hover{background:var(--vermilion-deep)}
+  button:disabled{background:#3a2421;color:#8a6a66;cursor:default}
+
+  .selftest{margin-top:14px;font-family:ui-monospace,monospace;font-size:11px;
+    letter-spacing:.06em;color:var(--paper-dim)}
+  .selftest.pass{color:var(--jade)} .selftest.fail{color:var(--vermilion)}
+
+  /* ---- committed-fire readout ---- */
+  .committed{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+  .cmlabel{font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.24em;
+    text-transform:uppercase;color:var(--paper-dim)}
+  .fire{font-size:38px;font-weight:700;text-transform:capitalize;margin:4px 0 2px;
+    color:var(--paper-dim);transition:transform .06s ease-out}
+  .fire.go{color:var(--jade)} .fire.bad{color:var(--vermilion)}
+  .fire.flash{transform:scale(1.14)}
+  .fmeta{font-family:ui-monospace,monospace;font-size:11px;color:var(--paper-dim)}
+
+  /* ---- tuning panel ---- */
+  .panel{margin-top:26px;background:var(--ink-2);border:1px solid var(--line);
+    border-radius:10px;padding:20px}
+  .panel h3{margin:0 0 16px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--paper-dim);font-family:ui-monospace,monospace;font-weight:600}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 28px}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  .ctl{display:flex;flex-direction:column;gap:5px}
+  .ctl label{font-family:ui-monospace,monospace;font-size:11px;color:var(--paper-dim);
+    display:flex;justify-content:space-between}
+  .ctl label b{color:var(--gold)}
+  .ctl input[type=range]{width:100%;accent-color:var(--vermilion)}
+  .row{display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-top:16px}
+  .chk{font-family:ui-monospace,monospace;font-size:12px;color:var(--paper);
+    display:flex;gap:7px;align-items:center;cursor:pointer}
+  select{font:inherit;background:var(--ink);color:var(--paper);border:1px solid var(--line);
+    border-radius:6px;padding:4px 8px;font-size:13px}
+  #joinCode{font-family:ui-monospace,monospace;background:var(--ink);color:var(--paper);
+    border:1px solid var(--line);border-radius:7px;padding:7px 10px;width:82px;
+    text-transform:uppercase;letter-spacing:.22em;font-size:13px}
+  #joinCode::placeholder{color:#4a5361;letter-spacing:.1em}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}
+  @media(max-width:680px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .stat .k{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--paper-dim)}
+  .stat .v{font-family:ui-monospace,monospace;font-size:22px;color:var(--paper);margin-top:4px}
+  .stat .v small{font-size:12px;color:var(--paper-dim)}
+
+  .log{margin-top:16px;font-family:ui-monospace,monospace;font-size:12px;
+    max-height:150px;overflow:auto;border-top:1px solid var(--line);padding-top:10px}
+  .log .e{display:flex;justify-content:space-between;padding:2px 0;color:var(--paper-dim)}
+  .log .e b{text-transform:capitalize}
+  .log .e.ok b{color:var(--jade)} .log .e.bad b{color:var(--vermilion)}
+  .log:empty::before{content:"no fires yet — form a seal";color:var(--paper-dim)}
+
+  .mini{font:inherit;background:var(--ink);color:var(--paper);border:1px solid var(--line);
+    padding:7px 11px;border-radius:7px;font-size:12px;margin:0;cursor:pointer}
+  .mini:hover{border-color:var(--vermilion);background:var(--ink-2)}
+
+  /* ---- duel ---- */
+  .duel{margin-top:26px;background:var(--ink-2);border:1px solid var(--line);border-radius:10px;padding:20px}
+  .duel h3{margin:0 0 16px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--paper-dim);font-family:ui-monospace,monospace;font-weight:600}
+  .hpwrap{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:16px}
+  @media(max-width:680px){.hpwrap{grid-template-columns:1fr}}
+  .hpcard .who{font-family:ui-monospace,monospace;font-size:12px;letter-spacing:.08em;
+    color:var(--paper-dim);display:flex;justify-content:space-between}
+  .hpcard .who b{color:var(--paper)}
+  .hpbar{height:16px;background:#0c1117;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:6px}
+  .hpbar>i{display:block;height:100%;width:100%;transition:width .18s ease-out}
+  .hpbar.you>i{background:linear-gradient(90deg,var(--jade),#6fe0b0)}
+  .hpbar.opp>i{background:linear-gradient(90deg,var(--vermilion-deep),var(--vermilion))}
+
+  .combo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:42px;
+    background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:14px}
+  .combo .seal{font-size:16px;text-transform:capitalize;color:var(--gold);font-weight:700}
+  .combo .arrow{color:var(--paper-dim)}
+  .combo .hint{font-family:ui-monospace,monospace;font-size:11px;color:var(--paper-dim);margin-left:auto}
+  .combo.locked{border-color:var(--vermilion)}
+  .combo .idle{color:var(--paper-dim);font-family:ui-monospace,monospace;font-size:12px}
+
+  .duelgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:680px){.duelgrid{grid-template-columns:1fr}}
+  .book .a{display:flex;justify-content:space-between;gap:10px;font-family:ui-monospace,monospace;
+    font-size:12px;padding:5px 0;border-bottom:1px dashed var(--line)}
+  .book .a .chain b{color:var(--gold);text-transform:capitalize;font-weight:700}
+  .book .a .amt.dmg{color:var(--vermilion)} .book .a .amt.heal{color:var(--jade)}
+  .feed{font-family:ui-monospace,monospace;font-size:12px;max-height:160px;overflow:auto}
+  .feed .c{padding:2px 0;color:var(--paper-dim)}
+  .feed .c b{text-transform:capitalize}
+  .feed .c.you b{color:var(--jade)} .feed .c.opp b{color:var(--vermilion)}
+
+  .duelbanner{text-align:center;font-size:30px;font-weight:700;padding:12px;margin-top:14px;
+    border-radius:8px;display:none;letter-spacing:.12em}
+  .duelbanner.win{display:block;color:var(--jade);border:1px solid var(--jade)}
+  .duelbanner.lose{display:block;color:var(--vermilion);border:1px solid var(--vermilion)}
+
+  /* ---- practice drills ---- */
+  .prow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .parena{margin-top:16px;background:var(--ink);border:1px solid var(--line);border-radius:8px;
+    padding:22px;display:flex;flex-direction:column;align-items:center;gap:10px}
+  .pname{font-size:30px;font-weight:700;letter-spacing:.04em}
+  .pname.idle{color:var(--paper-dim);font-size:18px}
+  .pseq{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;min-height:30px}
+  .pseq .ps{font-size:17px;text-transform:capitalize;padding:3px 12px;border-radius:6px;
+    border:1px solid var(--line);color:var(--paper-dim)}
+  .pseq .ps.done{color:var(--jade);border-color:var(--jade)}
+  .pseq .ps.next{color:var(--gold);border-color:var(--gold);font-weight:700}
+  .ptimer{font-family:ui-monospace,monospace;font-size:40px;color:var(--paper);line-height:1}
+  .ptimer.run{color:var(--gold)}
+  .ptimer.fail{color:var(--vermilion)}
+  .pmeta{font-family:ui-monospace,monospace;font-size:12px;color:var(--paper-dim);min-height:16px}
+  .pmeta b{color:var(--gold)}
+  .pmeta.newpb{color:var(--gold);font-weight:700}
+  .grade{font-weight:700}
+  .grade.S{color:var(--gold)} .grade.A{color:var(--jade)}
+  .grade.B{color:var(--paper)} .grade.C{color:var(--paper-dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="mark">封 <b>SEALWORK</b></div>
+    <div class="sub">hand-seal recognizer · v0</div>
+  </header>
+
+  <div class="stage">
+    <div class="videobox">
+      <video id="cam" playsinline muted></video>
+      <canvas id="overlay" class="overlay"></canvas>
+    </div>
+
+    <div class="readout">
+      <div class="nowlabel">Reading seal</div>
+      <div id="sign" class="sign idle">—</div>
+      <div id="conf" class="conf">awaiting camera</div>
+      <div class="bar"><i id="barfill"></i></div>
+
+      <div class="hands">hands detected: <b id="nhands">0</b></div>
+
+      <div class="ranks" id="ranks"></div>
+
+      <div class="committed">
+        <div class="cmlabel">Committed fire</div>
+        <div id="fire" class="fire">—</div>
+        <div id="fmeta" class="fmeta">awaiting</div>
+      </div>
+    </div>
+  </div>
+
+  <button id="start">Start camera</button>
+  <div id="status" class="status">Click start. The model self-test runs first.</div>
+  <div id="selftest" class="selftest">parity self-test: not run</div>
+
+  <div class="panel">
+    <h3>Practice · jutsu drills</h3>
+    <div class="prow">
+      <select id="pSelect"><option value="-1">random jutsu</option></select>
+      <button class="mini" id="pStart">Start drill</button>
+      <span class="status" id="pStatus" style="margin:0">start the camera, pick a jutsu, drill</span>
+    </div>
+    <div class="parena">
+      <div class="pname idle" id="pName">no drill running</div>
+      <div class="pseq" id="pSeq"></div>
+      <div class="ptimer" id="pTimer">0.00</div>
+      <div class="pmeta" id="pMeta"></div>
+    </div>
+    <div class="log" id="pLog"></div>
+  </div>
+
+  <div class="duel">
+    <h3>Duel · real-time 1v1</h3>
+    <div class="hpwrap">
+      <div class="hpcard">
+        <div class="who"><b id="youName">You</b><span id="youHpTxt">100 / 100</span></div>
+        <div class="hpbar you"><i id="youHp"></i></div>
+      </div>
+      <div class="hpcard">
+        <div class="who"><b id="oppName">Opponent</b><span id="oppHpTxt">— / 100</span></div>
+        <div class="hpbar opp"><i id="oppHp"></i></div>
+      </div>
+    </div>
+
+    <div class="combo" id="combo">
+      <span class="idle">form a seal to begin a jutsu…</span>
+    </div>
+
+    <div class="duelgrid">
+      <div class="book" id="book"></div>
+      <div class="feed" id="feed"></div>
+    </div>
+
+    <div class="duelbanner" id="banner"></div>
+
+    <div style="display:flex;gap:12px;align-items:center;margin-top:14px;flex-wrap:wrap">
+      <button class="mini" id="duelStart">Enter duel</button>
+      <button class="mini" id="duelReset">Reset</button>
+      <span class="status" id="duelStatus" style="margin:0">not connected — start the camera first, then enter the duel</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+      <button class="mini" id="btnQueue">Find opponent</button>
+      <button class="mini" id="btnRoom">Create room</button>
+      <input id="joinCode" maxlength="4" placeholder="CODE" autocomplete="off">
+      <button class="mini" id="btnJoin">Join room</button>
+      <span class="status" id="netStatus" style="margin:0">online duels need the signaling server (node server/signal.js)</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Stabilizer tuning · speed ↔ fairness</h3>
+    <div class="grid">
+      <div class="ctl"><label>Confidence floor <b id="vConf">0.60</b></label>
+        <input type="range" id="sConf" min="0.30" max="0.95" step="0.01" value="0.60"></div>
+      <div class="ctl"><label>Margin · top − 2nd <b id="vMargin">0.15</b></label>
+        <input type="range" id="sMargin" min="0" max="0.50" step="0.01" value="0.15"></div>
+      <div class="ctl"><label>Plateau hold <b id="vPlateau">120 ms</b></label>
+        <input type="range" id="sPlateau" min="0" max="400" step="10" value="120"></div>
+      <div class="ctl"><label>Min plateau frames <b id="vFrames">2</b></label>
+        <input type="range" id="sFrames" min="1" max="8" step="1" value="2"></div>
+      <div class="ctl"><label>Post-fire debounce <b id="vDeb">250 ms</b></label>
+        <input type="range" id="sDeb" min="0" max="800" step="10" value="250"></div>
+      <div class="ctl"><label>Context tie margin <b id="vTie">0.12</b></label>
+        <input type="range" id="sTie" min="0" max="0.30" step="0.01" value="0.12"></div>
+      <div class="ctl"><label>None veto · transit mute <b id="vNone">0.70</b></label>
+        <input type="range" id="sNone" min="0.30" max="0.95" step="0.01" value="0.70"></div>
+    </div>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="cNoRep" checked> no-repeat (block same sign twice)</label>
+      <label class="chk"><input type="checkbox" id="cLock"> lock valid-next to expected (test misfire flag)</label>
+      <label class="chk">expected sign
+        <select id="expected"><option value="-1">(any)</option></select></label>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="k">fires</div><div class="v" id="stFires">0</div></div>
+      <div class="stat"><div class="k">correct / false</div>
+        <div class="v"><span id="stCorrect" style="color:var(--jade)">0</span>
+          <small>/</small> <span id="stFalse" style="color:var(--vermilion)">0</span></div></div>
+      <div class="stat"><div class="k">missed</div><div class="v" id="stMissed">0</div></div>
+      <div class="stat"><div class="k">fire accuracy</div><div class="v" id="stAcc">—</div></div>
+      <div class="stat"><div class="k">commit latency</div><div class="v" id="stLat">—<small> ms</small></div></div>
+      <div class="stat"><div class="k">inference</div><div class="v" id="stInf">—<small> ms</small></div></div>
+      <div class="stat"><div class="k">throughput</div><div class="v" id="stFps">—<small> fps</small></div></div>
+      <div class="stat"><div class="k">controls</div>
+        <div class="v" style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="mini" id="bFalse">✗ false</button>
+          <button class="mini" id="bMiss">missed</button>
+          <button class="mini" id="bReset">reset</button>
+        </div></div>
+    </div>
+
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<!-- MediaPipe Hands + ONNX Runtime Web from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js" crossorigin="anonymous"></script>
+<script>
+// ---- labels + parity vector are loaded from signs.json / parity.json ----
+// signs.json is written by train.py (via export_onnx.py deploy copy) and may be
+// 12 classes (classic) or 13 (with a trailing "none" transition class). The
+// whole app adapts off its length; the 12 real seal indices never change.
+// parity.json {raw, logits} is regenerated by export_onnx.py on every export,
+// so the self-test can never go stale after a retrain.
+let SIGNS = [];        // populated by loadConfig()
+let NONE_IDX = -1;     // index of "none" if the deployed model has it
+let PARITY = null;     // {raw:[63], logits:[n]}
+
+const $ = id => document.getElementById(id);
+let session = null;
+
+// ===================================================================
+// Stabilizer: plateau-based, fire-once commitment layer.
+//
+// Core idea reconciling SPEED vs NO-MISFIRES: a deliberate seal sits as a
+// short *confident plateau* (same gated sign for a few frames / ~100-150ms),
+// whereas a hand just passing through a shape mid-weave never holds the
+// confidence+margin gate long enough. So we fire on the plateau, not a hold.
+//
+// Each clean detection emits ONE event then disarms until the plateau clears
+// (gate drops) — the combo matcher consumes events, it is not a held state.
+//
+// validNext (Set<idx> | null): the reachable signs given combo context.
+//   null  = free mode, every sign valid.
+//   When provided it is used to (a) break CLOSE ties toward reachable signs
+//   and (b) flag a committed out-of-set sign as wrong:true (a real misfire).
+// Critical rule: context only breaks *ties* and the just-fired sign is blocked
+// by no-repeat — a clearly-committed wrong sign still fires (wrong:true) and is
+// NEVER auto-corrected. Auto-correcting would delete the skill ceiling.
+// ===================================================================
+class Stabilizer {
+  constructor(){
+    this.conf=0.60; this.margin=0.15; this.plateauMs=120; this.minFrames=2;
+    this.debounceMs=250; this.tieMargin=0.12; this.noRepeat=true;
+    this.noneIdx=-1;   // index of the "none" transition class, -1 if model lacks it
+    this.noneVeto=0.70;// none only MUTES when decisive (>=veto); below, real signs compete
+    this.reset();
+  }
+  reset(){
+    this.candIdx=-1; this.candStart=0; this.candFrames=0;
+    this.lastFired=-1; this.lastFireTime=-1e9; this.armed=true;
+  }
+  // gate broke (low conf, hand passing through, or no hands): clear plateau, re-arm.
+  idle(){ this.candIdx=-1; this.candFrames=0; this.armed=true; }
+  setContext(lastFired){ this.lastFired = lastFired; } // combo matcher hook
+
+  push(probs, now, validNext){
+    const N=probs.length;
+
+    // "none" (transit) handling: a DECISIVE none (>= noneVeto) means the model
+    // is sure the hand is between seals — clear the plateau, fire nothing,
+    // never a misfire. Below the veto, none must not mute a held sign it only
+    // narrowly edges out (live frames are noisier than training captures), so
+    // the real signs compete on renormalized probs = P(sign | not transit).
+    // The plateau/margin gates still crush stray transit frames that slip by.
+    if(this.noneIdx>=0 && this.noneIdx<N){
+      const pn=probs[this.noneIdx];
+      if(pn>=this.noneVeto){ this.idle(); return null; }
+      const inv=1/Math.max(1-pn,1e-6);
+      probs=probs.map((p,i)=> i===this.noneIdx ? 0 : p*inv);
+    }
+
+    // global top-1 / top-2 (over all signs)
+    let i1=0; for(let i=1;i<N;i++) if(probs[i]>probs[i1]) i1=i;
+    let i2=-1; for(let i=0;i<N;i++){ if(i===i1) continue; if(i2<0||probs[i]>probs[i2]) i2=i; }
+    const gp1=probs[i1], gp2=(i2>=0?probs[i2]:0);
+
+    // Decide the candidate sign, whether it's a misfire, and its effective
+    // confidence/margin for the gate. Context (validNext) reshapes WHICH
+    // competitors count for the ambiguity test — it never auto-corrects.
+    let top, wrong, ep1, ep2;
+    if(!validNext){
+      // free mode: plain global gate
+      top=i1; wrong=false; ep1=gp1; ep2=gp2;
+    } else {
+      // best / 2nd-best among the reachable (in-set) signs
+      let bi1=-1,bp1=-1,bp2=-1;
+      for(let i=0;i<N;i++){ if(!validNext.has(i)) continue;
+        if(probs[i]>bp1){ bp2=bp1; bi1=i; bp1=probs[i]; }
+        else if(probs[i]>bp2){ bp2=probs[i]; } }
+      if(bp1<0) bp1=0; if(bp2<0) bp2=0;
+      if(!validNext.has(i1) && (gp1-bp1)>this.tieMargin){
+        // a CLEARLY dominant out-of-set sign: real misfire, fired as wrong,
+        // NEVER corrected toward the in-set option.
+        top=i1; wrong=true; ep1=gp1; ep2=gp2;
+      } else {
+        // in-set sign is the argmax, OR an out-of-set sign is only a close tie:
+        // context resolves toward the reachable sign. Ambiguity is now measured
+        // among IN-SET signs (the beaten out-of-set sign no longer counts).
+        top=bi1; wrong=false; ep1=bp1; ep2=bp2;
+      }
+    }
+
+    // confidence + margin gate (on the effective competitors)
+    const gated = top>=0 && ep1>=this.conf && (ep1-ep2)>=this.margin;
+    if(!gated){ this.idle(); return null; }
+
+    // accumulate the plateau (must be uninterrupted by ungated frames)
+    if(top!==this.candIdx){ this.candIdx=top; this.candStart=now; this.candFrames=1; this.armed=true; }
+    else this.candFrames++;
+
+    const inDebounce = (now-this.lastFireTime) < this.debounceMs;
+    const isRepeat   = this.noRepeat && (top===this.lastFired);
+    const plateauMet = (now-this.candStart) >= this.plateauMs && this.candFrames >= this.minFrames;
+
+    if(this.armed && plateauMet && !inDebounce && !isRepeat){
+      const latency = now - this.candStart;          // felt commit delay
+      this.armed=false; this.lastFired=top; this.lastFireTime=now;
+      return { sign:top, prob:ep1, margin:ep1-ep2, latency, wrong };
+    }
+    return null;
+  }
+}
+const stab = new Stabilizer();
+
+// ---- tuning stats (rolling) ----
+const stats = { fires:0, correct:0, fls:0, missed:0, lat:[], inf:[], frames:[] };
+let lastEvent = null, _ft = 0;
+function pushAvg(arr,v,cap=30){ arr.push(v); if(arr.length>cap) arr.shift(); }
+function avg(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
+
+// ---- normalization: MUST match collect.py exactly ----
+// pts: array of 21 [x,y,z]. center on wrist(0), scale by dist wrist->landmark9.
+function normalizeHand(pts){
+  const wx=pts[0][0], wy=pts[0][1], wz=pts[0][2];
+  const c = pts.map(p=>[p[0]-wx,p[1]-wy,p[2]-wz]);
+  let scale = Math.hypot(c[9][0],c[9][1],c[9][2]);
+  if(scale<1e-6) scale=1e-6;
+  const out=[];
+  for(const p of c){ out.push(p[0]/scale,p[1]/scale,p[2]/scale); }
+  return out; // 63 values
+}
+
+// Build the 126-vector: [Left 63][Right 63]; missing hand = zeros.
+function buildFeatures(handsResult){
+  let left=new Array(63).fill(0), right=new Array(63).fill(0), n=0;
+  if(handsResult.multiHandLandmarks && handsResult.multiHandedness){
+    handsResult.multiHandLandmarks.forEach((lm,i)=>{
+      const label = handsResult.multiHandedness[i].label; // "Left"/"Right"
+      const pts = lm.map(p=>[p.x,p.y,p.z]);
+      const norm = normalizeHand(pts);
+      if(label==="Left") left=norm; else right=norm;
+      n++;
+    });
+  }
+  return {feat:Float32Array.from(left.concat(right)), n};
+}
+
+async function runModel(feat){
+  const t = new ort.Tensor("float32", feat, [1,126]);
+  const out = await session.run({landmarks:t});
+  return Array.from(out.logits.data);
+}
+
+function softmax(logits){
+  const m=Math.max(...logits);
+  const ex=logits.map(v=>Math.exp(v-m));
+  const s=ex.reduce((a,b)=>a+b,0);
+  return ex.map(v=>v/s);
+}
+
+async function selfTest(){
+  // feed PARITY.raw as a single right hand, left=zeros, compare logits
+  const pts=[]; for(let i=0;i<21;i++) pts.push([PARITY.raw[i*3],PARITY.raw[i*3+1],PARITY.raw[i*3+2]]);
+  const right=normalizeHand(pts);
+  const feat=Float32Array.from(new Array(63).fill(0).concat(right));
+  const logits=await runModel(feat);
+  if(logits.length!==SIGNS.length){
+    const el=$("selftest");
+    el.textContent=`parity self-test: FAIL — model outputs ${logits.length} classes but signs.json has ${SIGNS.length}. Redeploy matching mlp.onnx + signs.json + parity.json.`;
+    el.className="selftest fail";
+    return false;
+  }
+  let maxDiff=0;
+  for(let i=0;i<logits.length;i++) maxDiff=Math.max(maxDiff,Math.abs(logits[i]-PARITY.logits[i]));
+  const el=$("selftest");
+  if(maxDiff<0.02){
+    el.textContent=`parity self-test: PASS (max diff ${maxDiff.toExponential(2)}) — JS normalization matches Python`;
+    el.className="selftest pass";
+    return true;
+  }else{
+    el.textContent=`parity self-test: FAIL (max diff ${maxDiff.toFixed(3)}) — normalization mismatch, do not trust predictions`;
+    el.className="selftest fail";
+    return false;
+  }
+}
+
+function renderRanks(probs){
+  const idx=probs.map((p,i)=>[p,i]).sort((a,b)=>b[0]-a[0]).slice(0,4);
+  $("ranks").innerHTML=idx.map(([p,i],r)=>
+    `<div class="rk ${r===0?'lead':''}"><span>${SIGNS[i]}</span><span>${(p*100).toFixed(0)}%</span></div>`
+  ).join("");
+}
+
+let hands=null, video=null, overlay=null, octx=null, mirror=null, mctx=null;
+
+function drawLandmarks(res){
+  octx.clearRect(0,0,overlay.width,overlay.height);
+  if(!res.multiHandLandmarks) return;
+  octx.fillStyle="#e2483d";
+  for(const lm of res.multiHandLandmarks){
+    for(const p of lm){
+      octx.beginPath();
+      octx.arc(p.x*overlay.width,p.y*overlay.height,3,0,6.29);
+      octx.fill();
+    }
+  }
+}
+
+async function onResults(res){
+  pushAvg(stats.frames, performance.now(), 30);   // for live fps
+  drawLandmarks(res);
+  const {feat,n}=buildFeatures(res);
+  $("nhands").textContent=n;
+  if(n===0){
+    $("sign").textContent="—"; $("sign").className="sign idle";
+    $("conf").textContent="no hands in frame";
+    $("barfill").style.width="0%";
+    stab.idle();                                   // clear plateau between attempts
+    frameTick();
+    return;
+  }
+  const t0=performance.now();
+  const logits=await runModel(feat);
+  pushAvg(stats.inf, performance.now()-t0, 30);
+  const probs=softmax(logits);
+  applyParams();
+  // display mirrors the stabilizer's veto rule: transit only when none is
+  // DECISIVE; otherwise the best real sign with P(sign | not transit)
+  const pn = NONE_IDX>=0 ? probs[NONE_IDX] : 0;
+  if(NONE_IDX>=0 && pn>=stab.noneVeto){
+    $("sign").textContent="· transit ·"; $("sign").className="sign idle";
+    $("conf").textContent=`in transit (${(pn*100).toFixed(1)}%)`;
+    $("barfill").style.width=(pn*100)+"%";
+  }else{
+    let best=-1; for(let i=0;i<probs.length;i++){ if(i===NONE_IDX) continue;
+      if(best<0||probs[i]>probs[best]) best=i; }
+    const conf = probs[best]/Math.max(1-pn,1e-6);
+    $("sign").textContent=SIGNS[best];
+    $("sign").className="sign live";
+    $("conf").textContent=`confidence ${(conf*100).toFixed(1)}%`
+      + (pn>0.1 ? `  ·  transit ${(pn*100).toFixed(0)}%` : "");
+    $("barfill").style.width=(conf*100)+"%";
+  }
+  renderRanks(probs);
+
+  // ---- stabilizer: raw probs in, fire-once events out ----
+  const ev = stab.push(probs, performance.now(), currentValidNext());
+  if(ev) onFire(ev);
+  frameTick();
+}
+function frameTick(){ if((++_ft % 5)===0){ renderStats(); if(duel.active) renderCombo(); } }   // throttle live readout / stun-clear
+
+async function start(){
+  $("start").disabled=true;
+  const st=$("status");
+  try{
+    st.className="status"; st.textContent="loading model…";
+    await configReady;                       // signs.json + parity.json
+    session=await ort.InferenceSession.create("mlp.onnx?v="+Date.now());
+
+    st.textContent="running parity self-test…";
+    const ok=await selfTest();
+    if(!ok){ st.className="status err"; st.textContent="Self-test failed — predictions disabled. Check that mlp.onnx and SIGNS match training."; return; }
+
+    st.textContent="starting camera…";
+    video=$("cam"); overlay=$("overlay"); octx=overlay.getContext("2d");
+
+    hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+    hands.setOptions({maxNumHands:2,modelComplexity:1,
+      minDetectionConfidence:0.5,minTrackingConfidence:0.5});
+    hands.onResults(onResults);
+
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480}});
+    video.srcObject=stream;
+    await video.play();
+    overlay.width=video.videoWidth; overlay.height=video.videoHeight;
+
+    // Mirror the frame before MediaPipe sees it, to match collect.py (cv2.flip).
+    // collect.py flipped the frame then ran MediaPipe, so training handedness AND
+    // landmark x-geometry are in mirrored space. Feed MediaPipe the same here or
+    // inference is the mirror image of what the model trained on.
+    mirror=document.createElement("canvas");
+    mirror.width=video.videoWidth; mirror.height=video.videoHeight;
+    mctx=mirror.getContext("2d");
+
+    st.className="status ok"; st.textContent="live — form a seal";
+
+    const loop=async()=>{
+      mctx.setTransform(-1,0,0,1,mirror.width,0);   // horizontal flip
+      mctx.drawImage(video,0,0,mirror.width,mirror.height);
+      await hands.send({image:mirror});
+      requestAnimationFrame(loop);
+    };
+    loop();
+  }catch(e){
+    st.className="status err"; st.textContent="Error: "+e.message;
+    $("start").disabled=false;
+  }
+}
+$("start").addEventListener("click",start);
+
+// ================= tuning panel wiring =================
+function applyParams(){
+  stab.conf      = parseFloat($("sConf").value);
+  stab.margin    = parseFloat($("sMargin").value);
+  stab.plateauMs = parseFloat($("sPlateau").value);
+  stab.minFrames = parseInt($("sFrames").value,10);
+  stab.debounceMs= parseFloat($("sDeb").value);
+  stab.tieMargin = parseFloat($("sTie").value);
+  stab.noneVeto  = parseFloat($("sNone").value);
+  stab.noRepeat  = $("cNoRep").checked;
+}
+// free mode = null (all valid). Lock-to-expected feeds a 1-element valid set so
+// the out-of-set misfire path (wrong:true) is exercisable while tuning.
+function currentValidNext(){
+  // drilling: the prompted attack's next seal is the only expected sign
+  if(practice.active && practice.attack && practice.idx>=0)
+    return new Set([practice.seqIdx[practice.idx]]);
+  // mid-combo in a duel: reachable next-signs (biases recognition, flags misfires)
+  if(duel.active && matcher && matcher.buffer.length) return matcher.validNext();
+  const exp=parseInt($("expected").value,10);
+  if($("cLock").checked && exp>=0) return new Set([exp]);
+  return null;
+}
+
+function onFire(ev){
+  stats.fires++;
+  pushAvg(stats.lat, ev.latency);
+  const exp=parseInt($("expected").value,10);
+  let bad = ev.wrong;
+  if(exp>=0){
+    if(ev.sign===exp){ stats.correct++; ev._countedCorrect=true; }
+    else { stats.fls++; bad=true; }
+  }
+  lastEvent=ev;
+
+  const f=$("fire");
+  f.textContent=SIGNS[ev.sign];
+  f.className="fire "+(bad?"bad":"go")+" flash";
+  $("fmeta").textContent=
+    `p=${(ev.prob*100).toFixed(0)}%  ·  margin ${(ev.margin*100).toFixed(0)}  ·  ${ev.latency.toFixed(0)}ms`
+    + (ev.wrong?"  ·  MISFIRE (out-of-set)":"");
+  setTimeout(()=>f.classList.remove("flash"),90);
+
+  const log=$("log");
+  const row=document.createElement("div");
+  row.className="e "+(bad?"bad":"ok");
+  row.innerHTML=`<b>${SIGNS[ev.sign]}${ev.wrong?" ✗":""}</b>`
+    +`<span>${(ev.prob*100).toFixed(0)}% · m${(ev.margin*100).toFixed(0)} · ${ev.latency.toFixed(0)}ms</span>`;
+  log.prepend(row);
+  while(log.children.length>12) log.removeChild(log.lastChild);
+
+  renderStats();
+  if(practice.active) practice.onFire(ev);      // drills consume fires first
+  else if(duel.active) duelOnFire(ev);          // else the combo matcher
+}
+
+function renderStats(){
+  $("stFires").textContent  = stats.fires;
+  $("stCorrect").textContent= stats.correct;
+  $("stFalse").textContent  = stats.fls;
+  $("stMissed").textContent = stats.missed;
+  const L=avg(stats.lat), I=avg(stats.inf);
+  $("stLat").innerHTML = (L==null?"—":L.toFixed(0))+"<small> ms</small>";
+  $("stInf").innerHTML = (I==null?"—":I.toFixed(1))+"<small> ms</small>";
+  const denom=stats.correct+stats.fls;
+  $("stAcc").textContent = denom ? ((stats.correct/denom*100).toFixed(0)+"%") : "—";
+  let fps=null;
+  if(stats.frames.length>1){
+    const span=stats.frames[stats.frames.length-1]-stats.frames[0];
+    if(span>0) fps=(stats.frames.length-1)/(span/1000);
+  }
+  $("stFps").innerHTML = (fps==null?"—":fps.toFixed(0))+"<small> fps</small>";
+}
+
+// sliders: live value labels
+[["sConf","vConf",v=>v.toFixed(2)],
+ ["sMargin","vMargin",v=>v.toFixed(2)],
+ ["sPlateau","vPlateau",v=>v.toFixed(0)+" ms"],
+ ["sFrames","vFrames",v=>v.toFixed(0)],
+ ["sDeb","vDeb",v=>v.toFixed(0)+" ms"],
+ ["sTie","vTie",v=>v.toFixed(2)],
+ ["sNone","vNone",v=>v.toFixed(2)]].forEach(([s,v,fmt])=>{
+  const el=$(s), lab=$(v);
+  const upd=()=>lab.textContent=fmt(parseFloat(el.value));
+  el.addEventListener("input",upd); upd();
+});
+
+// manual tuning marks (for free mode where there's no ground truth)
+$("bFalse").addEventListener("click",()=>{
+  if(lastEvent && lastEvent._countedCorrect){ stats.correct--; lastEvent._countedCorrect=false; }
+  stats.fls++; renderStats();
+});
+$("bMiss").addEventListener("click",()=>{ stats.missed++; renderStats(); });
+$("bReset").addEventListener("click",()=>{
+  stats.fires=stats.correct=stats.fls=stats.missed=0;
+  stats.lat=[]; lastEvent=null; $("log").innerHTML="";
+  $("fire").textContent="—"; $("fire").className="fire"; $("fmeta").textContent="awaiting";
+  renderStats();
+});
+renderStats();
+
+// ===================================================================
+// DUEL  —  combo matcher + attack table + real-time 1v1 (local 2-tab)
+// ===================================================================
+
+// Attacks: sign sequence -> effect. Constraints honored:
+//  - two consecutive signs are never identical (combo invariant)
+//  - no attack's sequence is a prefix of another (casting is unambiguous)
+// Longer chains hit harder = reward for clean, fast weaving. Heals cost tempo.
+const ATTACKS = [
+  {name:"Fireball",       kind:"damage", amount:14, seq:["tiger","horse"]},
+  {name:"Phoenix Flower", kind:"damage", amount:20, seq:["tiger","dog","ram"]},
+  {name:"Dragon Flame",   kind:"damage", amount:30, seq:["tiger","snake","boar","ox"]},
+  {name:"Chidori",        kind:"damage", amount:24, seq:["ox","hare","monkey"]},
+  {name:"Rasengan",       kind:"damage", amount:22, seq:["dragon","ram","snake"]},
+  {name:"Water Bullet",   kind:"damage", amount:16, seq:["snake","ram","boar"]},
+  {name:"Mystic Palm",    kind:"heal",   amount:20, seq:["ram","dog","bird"]},
+  {name:"Second Chakra",  kind:"heal",   amount:14, seq:["dog","monkey","horse"]},
+];
+
+// Consumes stabilizer fire events, tracks the in-progress sequence, and reports
+// cast / progress / misfire. validNext() feeds the stabilizer so mid-combo it
+// biases toward reachable signs and flags a decisive wrong sign as a misfire.
+class ComboMatcher {
+  constructor(attacks){
+    this.attacks = attacks.map(a => ({...a, seqIdx: a.seq.map(s => SIGNS.indexOf(s))}));
+    this.buffer = [];
+  }
+  reset(){ this.buffer = []; }
+  validNext(){
+    const set = new Set();
+    for(const a of this.attacks){
+      if(a.seqIdx.length <= this.buffer.length) continue;
+      if(this.buffer.every((v,i) => a.seqIdx[i] === v)) set.add(a.seqIdx[this.buffer.length]);
+    }
+    return set;
+  }
+  reachable(){
+    return this.attacks.filter(a =>
+      a.seqIdx.length >= this.buffer.length && this.buffer.every((v,i) => a.seqIdx[i] === v));
+  }
+  consume(signIdx){
+    const cand = this.buffer.concat([signIdx]);
+    for(const a of this.attacks){                        // exact -> cast
+      if(a.seqIdx.length === cand.length && a.seqIdx.every((v,i) => v === cand[i])){
+        this.buffer = []; return {type:"cast", attack:a};
+      }
+    }
+    const isPrefix = this.attacks.some(a =>              // still building
+      a.seqIdx.length > cand.length && cand.every((v,i) => a.seqIdx[i] === v));
+    if(isPrefix){ this.buffer = cand; return {type:"progress"}; }
+    const wasMid = this.buffer.length > 0;               // broke the chain
+    const starts = this.attacks.some(a => a.seqIdx[0] === signIdx);
+    this.buffer = starts ? [signIdx] : [];
+    return wasMid ? {type:"misfire"} : {type:"ignored"};
+  }
+}
+
+class Duel {
+  constructor(){
+    this.maxHp = 100; this.penaltyMs = 700;
+    this.active = false; this.over = false;
+    this.myHp = this.maxHp; this.oppHp = this.maxHp;
+    this.myId = Math.random().toString(36).slice(2, 8);
+    this.oppId = null; this.transport = null; this.lockUntil = 0; this.result = null;
+  }
+  // transport = {kind, send(obj), close(), onmessage} — BroadcastChannel for
+  // local 2-tab play, WebRTC DataChannel for online. Same protocol either way.
+  connect(tr){
+    if(this.transport && this.transport!==tr && this.transport.close) this.transport.close();
+    this.transport = tr;
+    tr.onmessage = m => this.onMsg(m);
+  }
+  // shared duel entry: reset state and run the hello/ack handshake
+  begin(){
+    if(!matcher){ $("duelStatus").textContent="still loading signs.json — try again in a second"; return; }
+    if(typeof practice!=="undefined" && practice.active) practice.stop();  // modes are exclusive
+    this.active = true; this.over = false; this.result = null; this.oppId = null;
+    this.myHp = this.oppHp = this.maxHp; matcher.reset();
+    this.send({t:"hello", id:this.myId});
+    this.send({t:"hp", id:this.myId, hp:this.myHp});
+    renderDuel(); renderCombo();
+  }
+  start(){   // local 2-tab mode
+    if(!matcher){ $("duelStatus").textContent="still loading signs.json — try again in a second"; return; }
+    if(!this.transport || this.transport.kind!=="local"){
+      netCleanup();
+      this.connect(localTransport());
+    }
+    this.begin();
+  }
+  resetDuel(){
+    this.active = false; this.over = false; this.oppId = null; this.result = null;
+    this.myHp = this.oppHp = this.maxHp; this.lockUntil = 0;
+    if(matcher) matcher.reset();
+    renderDuel(); renderCombo();
+  }
+  send(m){ if(this.transport) this.transport.send(m); }
+  onMsg(m){
+    if(!m || m.id === this.myId) return;                 // ignore our own
+    if(m.t === "hello"){ this.oppId = m.id; this.send({t:"ack", id:this.myId}); this.send({t:"hp", id:this.myId, hp:this.myHp}); }
+    else if(m.t === "ack"){ this.oppId = m.id; }
+    else if(m.t === "hp"){ this.oppHp = m.hp; }
+    else if(m.t === "hit"){ this.applyDamage(m.dmg); }
+    else if(m.t === "cast"){ logCast(m.name, m.kind, "opp"); }
+    else if(m.t === "over"){ this.over = true; this.result = (m.loser === this.myId) ? "lose" : "win"; }
+    renderDuel();
+  }
+  applyDamage(d){
+    if(this.over) return;
+    this.myHp = Math.max(0, this.myHp - d);
+    this.send({t:"hp", id:this.myId, hp:this.myHp});
+    if(this.myHp <= 0){ this.over = true; this.result = "lose"; this.send({t:"over", id:this.myId, loser:this.myId}); }
+    renderDuel();
+  }
+  cast(attack){
+    if(!this.active || this.over) return;
+    if(performance.now() < this.lockUntil) return;
+    logCast(attack.name, attack.kind, "you");
+    this.send({t:"cast", id:this.myId, name:attack.name, kind:attack.kind});
+    if(attack.kind === "damage"){
+      this.send({t:"hit", id:this.myId, dmg:attack.amount});   // victim decrements own hp
+    } else {
+      this.myHp = Math.min(this.maxHp, this.myHp + attack.amount);
+      this.send({t:"hp", id:this.myId, hp:this.myHp});
+    }
+    renderDuel();
+  }
+  misfire(){
+    if(!this.active || this.over) return;
+    this.lockUntil = performance.now() + this.penaltyMs;      // lose tempo (the real cost)
+  }
+}
+
+let matcher = null;               // built in loadConfig() once SIGNS is known
+const duel = new Duel();
+
+function duelOnFire(ev){
+  if(!duel.active || duel.over) return;
+  if(performance.now() < duel.lockUntil) return;             // stunned by a misfire
+  const res = matcher.consume(ev.sign);
+  if(res.type === "cast") duel.cast(res.attack);
+  else if(res.type === "misfire") duel.misfire();
+  renderCombo();
+}
+
+function renderBook(){
+  $("book").innerHTML = ATTACKS.map(a => {
+    const chain = a.seq.map(s => `<b>${s}</b>`).join(" → ");
+    const amt = a.kind === "heal" ? `+${a.amount} hp` : `${a.amount} dmg`;
+    return `<div class="a"><span class="chain">${chain}</span>`
+         + `<span class="amt ${a.kind === "heal" ? "heal" : "dmg"}">${amt}</span></div>`;
+  }).join("");
+}
+function renderDuel(){
+  const oppKnown = duel.oppId != null;
+  $("youHp").style.width = (duel.myHp / duel.maxHp * 100) + "%";
+  $("oppHp").style.width = (oppKnown ? duel.oppHp / duel.maxHp * 100 : 100) + "%";
+  $("youHpTxt").textContent = `${duel.myHp} / ${duel.maxHp}`;
+  $("oppHpTxt").textContent = oppKnown ? `${duel.oppHp} / ${duel.maxHp}` : `— / ${duel.maxHp}`;
+  const b = $("banner");
+  if(duel.over && duel.result){ b.className = "duelbanner " + (duel.result === "win" ? "win" : "lose");
+    b.textContent = duel.result === "win" ? "VICTORY" : "DEFEAT"; }
+  else { b.className = "duelbanner"; b.textContent = ""; }
+  $("duelStatus").textContent = !duel.active
+    ? "not connected — start the camera first, then enter the duel"
+    : duel.over ? "duel over — press Reset for a rematch"
+    : !oppKnown ? "waiting for opponent — open this page in a 2nd tab and Enter duel"
+    : "dueling · weave fast, weave clean";
+}
+function renderCombo(){
+  if(!matcher) return;
+  const c = $("combo");
+  const locked = performance.now() < duel.lockUntil;
+  if(matcher.buffer.length === 0){
+    c.className = "combo" + (locked ? " locked" : "");
+    c.innerHTML = `<span class="idle">${locked ? "misfire! — stunned…" : "form a seal to begin a jutsu…"}</span>`;
+    return;
+  }
+  const chain = matcher.buffer.map(i => `<span class="seal">${SIGNS[i]}</span>`)
+                              .join(`<span class="arrow">→</span>`);
+  const reach = matcher.reachable().map(a => a.name);
+  c.className = "combo" + (locked ? " locked" : "");
+  c.innerHTML = chain + `<span class="hint">${reach.length ? "→ " + reach.join(" / ") : "no jutsu — chain broken"}</span>`;
+}
+function logCast(name, kind, who){
+  const f = $("feed");
+  const d = document.createElement("div"); d.className = "c " + who;
+  d.innerHTML = `${who === "you" ? "you cast" : "opponent cast"} <b>${name}</b> <span>(${kind === "heal" ? "heal" : "dmg"})</span>`;
+  f.prepend(d); while(f.children.length > 14) f.removeChild(f.lastChild);
+}
+
+// "Enter duel" = start local 2-tab play, or rematch over a live P2P link
+$("duelStart").addEventListener("click", () => {
+  if(duel.transport && duel.transport.kind==="rtc" && dc && dc.readyState==="open") duel.begin();
+  else duel.start();
+});
+$("duelReset").addEventListener("click", () => duel.resetDuel());
+renderBook(); renderDuel();
+
+// ===================================================================
+// ONLINE — WebSocket signaling + WebRTC DataChannel transport.
+// The signaling server only pairs two players (room code or random
+// queue) and relays the WebRTC handshake; once the DataChannel opens
+// the duel runs peer-to-peer and the server is out of the loop.
+// ===================================================================
+// Local dev: node server/signal.js (port 8001). Deployed: the Render
+// service from render.yaml — update the hostname if yours differs.
+const SIGNAL_URL = (location.hostname==="localhost" || location.hostname==="127.0.0.1")
+  ? "ws://"+location.hostname+":8001"
+  : "wss://sealwork-signal.onrender.com";
+let sigWs=null, pc=null, dc=null;
+
+function netStatus(s){ $("netStatus").textContent=s; }
+
+function localTransport(){
+  const bc=new BroadcastChannel("sealwork-duel");
+  const tr={kind:"local", onmessage:null,
+    send:m=>bc.postMessage(m), close:()=>bc.close()};
+  bc.onmessage=e=>{ if(tr.onmessage) tr.onmessage(e.data); };
+  return tr;
+}
+
+function netCleanup(){
+  if(sigWs){ sigWs.onmessage=null; sigWs.onerror=null; try{sigWs.close();}catch(e){} sigWs=null; }
+  if(pc){ try{pc.close();}catch(e){} pc=null; dc=null; }
+}
+
+function netConnect(action, code){
+  netCleanup();
+  let ws;
+  try{ ws=new WebSocket(SIGNAL_URL); }catch(e){ netStatus("bad signaling URL"); return; }
+  sigWs=ws;
+  netStatus(action==="queue" ? "looking for an opponent…" : "contacting signaling server…");
+  ws.onopen=()=>ws.send(JSON.stringify(action==="join" ? {t:"join", code} : {t:action}));
+  ws.onmessage=e=>{
+    const m=JSON.parse(e.data);
+    if(m.t==="room") netStatus(`room ${m.code} — send this code to your opponent`);
+    else if(m.t==="paired") startRtc(ws, m.initiator);
+    else if(m.t==="signal") handleSignal(m.data);
+    else if(m.t==="error") netStatus("error: "+m.msg);
+    else if(m.t==="peer-left") netStatus("opponent left before connecting");
+  };
+  ws.onerror=()=>{ if(!dc) netStatus("signaling server unreachable — run: node server/signal.js"); };
+}
+
+function startRtc(ws, initiator){
+  pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
+  pc.onicecandidate=ev=>{ if(ev.candidate && ws.readyState===1)
+    ws.send(JSON.stringify({t:"signal", data:{ice:ev.candidate}})); };
+  if(initiator){
+    wireDc(pc.createDataChannel("duel"));
+    pc.createOffer().then(o=>pc.setLocalDescription(o))
+      .then(()=>ws.send(JSON.stringify({t:"signal", data:{sdp:pc.localDescription}})));
+  } else {
+    pc.ondatachannel=ev=>wireDc(ev.channel);
+  }
+  netStatus("paired — negotiating peer-to-peer…");
+}
+
+async function handleSignal(data){
+  if(!pc) return;
+  try{
+    if(data.sdp){
+      await pc.setRemoteDescription(data.sdp);
+      if(data.sdp.type==="offer"){
+        const a=await pc.createAnswer();
+        await pc.setLocalDescription(a);
+        if(sigWs && sigWs.readyState===1)
+          sigWs.send(JSON.stringify({t:"signal", data:{sdp:pc.localDescription}}));
+      }
+    } else if(data.ice){
+      await pc.addIceCandidate(data.ice);
+    }
+  }catch(e){ /* stray ICE before SDP is harmless */ }
+}
+
+function wireDc(channel){
+  dc=channel;
+  dc.onopen=()=>{
+    const tr={kind:"rtc", onmessage:null,
+      send:m=>{ try{ dc.send(JSON.stringify(m)); }catch(e){} },
+      close:()=>netCleanup()};
+    dc.onmessage=e=>{ if(tr.onmessage) tr.onmessage(JSON.parse(e.data)); };
+    duel.connect(tr);
+    duel.begin();
+    netStatus("connected peer-to-peer — dueling");
+    if(sigWs){ sigWs.close(); sigWs=null; }        // server's job is done
+  };
+  dc.onclose=()=>{
+    if(duel.active && !duel.over && duel.transport && duel.transport.kind==="rtc"){
+      duel.over=true; duel.result="win"; renderDuel();
+      netStatus("opponent disconnected — you win");
+    } else if(duel.transport && duel.transport.kind==="rtc"){
+      netStatus("connection closed");
+    }
+  };
+}
+
+$("btnQueue").addEventListener("click", ()=>netConnect("queue"));
+$("btnRoom").addEventListener("click", ()=>netConnect("create"));
+$("btnJoin").addEventListener("click", ()=>{
+  const code=$("joinCode").value.trim().toUpperCase();
+  if(code.length!==4){ netStatus("enter the 4-letter room code"); return; }
+  netConnect("join", code);
+});
+$("joinCode").addEventListener("keydown", e=>{ if(e.key==="Enter") $("btnJoin").click(); });
+
+// ===================================================================
+// PRACTICE — solo jutsu drills: prompt an attack, time the weave,
+// grade it, keep personal bests (localStorage). Consumes the same
+// fire-once events as the duel; the two modes are mutually exclusive.
+// ===================================================================
+const PB_KEY = "sealwork-pb";
+// grade thresholds in ms PER TRANSITION (floor ≈ debounce 250 + plateau 120)
+const GRADES = [[450,"S"],[650,"A"],[900,"B"],[Infinity,"C"]];
+
+class Practice {
+  constructor(){
+    this.active=false; this.attack=null; this.seqIdx=[]; this.idx=0;
+    this.t0=0; this.timerId=null; this.attempts=0; this.clean=0; this.miss=0;
+  }
+  pbs(){ try{ return JSON.parse(localStorage.getItem(PB_KEY)||"{}"); }catch(e){ return {}; } }
+  setPb(name, ms){ const p=this.pbs(); p[name]=ms; localStorage.setItem(PB_KEY, JSON.stringify(p)); }
+
+  start(){
+    duel.resetDuel();                     // modes are exclusive
+    this.active=true; this.attempts=this.clean=this.miss=0;
+    $("pStart").textContent="Stop drill";
+    this.prompt();
+  }
+  stop(){
+    this.active=false; this.attack=null; this._stopTimer();
+    $("pStart").textContent="Start drill";
+    $("pName").textContent="no drill running"; $("pName").className="pname idle";
+    $("pSeq").innerHTML=""; $("pTimer").textContent="0.00"; $("pTimer").className="ptimer";
+    $("pStatus").textContent=`stopped — ${this.clean}/${this.attempts} clean`;
+    $("pMeta").textContent="";
+  }
+  prompt(){
+    const sel=parseInt($("pSelect").value,10);
+    let pool = sel>=0 ? [ATTACKS[sel]] : ATTACKS.filter(a=>a!==this.attack);
+    this.attack = pool[Math.floor(Math.random()*pool.length)];
+    this.seqIdx = this.attack.seq.map(s=>SIGNS.indexOf(s));
+    this.idx=0; this._stopTimer();
+    stab.lastFired=-1;                    // new prompt = clean slate for no-repeat
+    $("pName").textContent=this.attack.name; $("pName").className="pname";
+    $("pTimer").textContent="0.00"; $("pTimer").className="ptimer";
+    const pb=this.pbs()[this.attack.name];
+    $("pMeta").className="pmeta";
+    $("pMeta").textContent = pb ? `personal best ${(pb/1000).toFixed(2)}s` : "no personal best yet";
+    this.renderSeq();
+    $("pStatus").textContent="weave it — timer starts on your first seal";
+  }
+  renderSeq(){
+    $("pSeq").innerHTML=this.attack.seq.map((s,i)=>{
+      const cls = i<this.idx ? "done" : (i===this.idx ? "next" : "");
+      return `<span class="ps ${cls}">${s}</span>`;
+    }).join("");
+  }
+  onFire(ev){
+    if(!this.attack || this.idx<0) return;   // idx<0 = cooldown after a finish
+    if(ev.sign===this.seqIdx[this.idx]){
+      if(this.idx===0){ this.t0=performance.now(); this._startTimer(); }
+      this.idx++;
+      this.renderSeq();
+      if(this.idx>=this.seqIdx.length) this.finish();
+    } else if(this.idx>0){
+      this.fail(ev.sign);
+    } else {
+      $("pStatus").textContent=`that was ${SIGNS[ev.sign]} — start with ${this.attack.seq[0]}`;
+    }
+  }
+  finish(){
+    const ms=performance.now()-this.t0;
+    this._stopTimer();
+    this.idx=-1;                          // cooldown: ignore fires until next prompt
+    this.attempts++; this.clean++;
+    const per=ms/Math.max(this.seqIdx.length-1,1);
+    const grade=GRADES.find(([t])=>per<=t)[1];
+    $("pTimer").textContent=(ms/1000).toFixed(2); $("pTimer").className="ptimer";
+    const pb=this.pbs()[this.attack.name];
+    let newPb=false;
+    if(!pb || ms<pb){ this.setPb(this.attack.name, Math.round(ms)); newPb=true; }
+    $("pMeta").className="pmeta"+(newPb?" newpb":"");
+    $("pMeta").innerHTML=`<span class="grade ${grade}">${grade}</span> · ${(per/1000).toFixed(2)}s/seal`
+      + (newPb ? " · NEW BEST" : ` · best ${(pb/1000).toFixed(2)}s`);
+    this.log(`${this.attack.name}`, `${(ms/1000).toFixed(2)}s · ${grade}${newPb?" ★":""}`, true);
+    const again=this.attack;
+    setTimeout(()=>{ if(this.active && this.attack===again) this.prompt(); }, 1200);
+  }
+  fail(signIdx){
+    this._stopTimer();
+    this.attempts++; this.miss++;
+    $("pTimer").className="ptimer fail";
+    $("pStatus").textContent=`broke the chain with ${SIGNS[signIdx]} — again`;
+    this.log(this.attack.name, `✗ broke at seal ${this.idx+1} (${SIGNS[signIdx]})`, false);
+    this.idx=0; stab.lastFired=-1;        // clean slate: re-weave from the top
+    this.renderSeq();
+  }
+  log(name, detail, ok){
+    const l=$("pLog"); const d=document.createElement("div");
+    d.className="e "+(ok?"ok":"bad");
+    d.innerHTML=`<b>${name}</b><span>${detail}</span>`;
+    l.prepend(d); while(l.children.length>10) l.removeChild(l.lastChild);
+  }
+  _startTimer(){
+    this._stopTimer(); $("pTimer").className="ptimer run";
+    this.timerId=setInterval(()=>{ $("pTimer").textContent=((performance.now()-this.t0)/1000).toFixed(2); },50);
+  }
+  _stopTimer(){ if(this.timerId){ clearInterval(this.timerId); this.timerId=null; } }
+}
+const practice = new Practice();
+
+$("pStart").addEventListener("click", ()=> practice.active ? practice.stop() : practice.start());
+ATTACKS.forEach((a,i)=>{
+  const o=document.createElement("option"); o.value=i;
+  o.textContent=`${a.name} (${a.seq.length})`; $("pSelect").appendChild(o);
+});
+$("pSelect").addEventListener("change", ()=>{ if(practice.active) practice.prompt(); });
+
+// ---- config bootstrap: signs.json + parity.json drive everything ----
+async function loadConfig(){
+  try{
+    // cache-bust: python -m http.server sends no validation headers, so after a
+    // model redeploy browsers happily serve the STALE cached mlp.onnx/jsons —
+    // the self-test then fails with a class-count mismatch. ?v= forces fresh.
+    const v = Date.now();
+    const [signs, parity] = await Promise.all([
+      fetch("signs.json?v="+v).then(r => { if(!r.ok) throw new Error("signs.json "+r.status); return r.json(); }),
+      fetch("parity.json?v="+v).then(r => { if(!r.ok) throw new Error("parity.json "+r.status); return r.json(); }),
+    ]);
+    SIGNS = signs;
+    NONE_IDX = SIGNS.indexOf("none");        // -1 on a classic 12-class model
+    PARITY = parity;
+    stab.noneIdx = NONE_IDX;
+    // expected-sign dropdown ("none" can never fire, so it's excluded)
+    SIGNS.forEach((s, i) => {
+      if(i === NONE_IDX) return;
+      const o = document.createElement("option"); o.value = i; o.textContent = s;
+      $("expected").appendChild(o);
+    });
+    matcher = new ComboMatcher(ATTACKS);
+  }catch(e){
+    const st = $("status");
+    st.className = "status err";
+    st.textContent = "Failed to load signs.json / parity.json: " + e.message;
+    throw e;
+  }
+}
+const configReady = loadConfig();
+</script>
+</body>
+</html>

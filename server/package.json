@@ -1,0 +1,13 @@
+{
+  "name": "sealwork-signal",
+  "private": true,
+  "version": "0.1.0",
+  "description": "WebSocket signaling server for Sealwork online duels",
+  "main": "signal.js",
+  "scripts": {
+    "start": "node signal.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

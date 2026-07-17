@@ -1,0 +1,13 @@
+# environments
+venv/
+.venv/
+server/node_modules/
+__pycache__/
+
+# local data & artifacts (dataset is single-subject hand landmarks; kept local)
+data/
+models/mlp.pt
+
+# editor/tooling
+.claude/
+*.pyc
