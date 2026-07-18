@@ -9,5 +9,4 @@ data/
 models/mlp.pt
 
 # editor/tooling
-.claude/
 *.pyc
