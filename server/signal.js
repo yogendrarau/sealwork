@@ -13,6 +13,13 @@ const { WebSocketServer } = require("ws");
 
 const PORT = process.env.PORT || 8001;
 
+// SINGLE INSTANCE ONLY. Both of these live in process memory, so running two
+// containers behind a load balancer splits the brain: a room created on one is
+// invisible to the other, and two queued players can wait on separate
+// instances forever. Symptom is intermittent "room not found" and duels that
+// never pair — roughly half of attempts, which reads as a flaky network rather
+// than a config mistake. Scaling out needs shared state (Redis) or sticky
+// sessions first; until then keep instance_count at 1.
 const rooms = new Map();   // code -> waiting host ws
 let queue = [];            // random-match waiting list
 

@@ -29,6 +29,10 @@ services:
 
     # smallest paid instance; confirm the current slug in the UI, DO renames these
     instance_size_slug: basic-xxs
+
+    # MUST stay 1 — rooms and the match queue are in process memory, so a second
+    # container splits the brain and roughly half of all duels fail to pair.
+    # See the comment at the top of server/signal.js.
     instance_count: 1
 
     # App Platform injects PORT (8080) and the server reads it
