@@ -1286,12 +1286,14 @@ renderBook(); renderDuel();
 // queue) and relays the WebRTC handshake; once the DataChannel opens
 // the duel runs peer-to-peer and the server is out of the loop.
 // ===================================================================
-// Local dev: node server/signal.js (port 8001). Deployed: the Render
-// service from render.yaml — update the hostname if yours differs.
+// Local dev: node server/signal.js (port 8001). Deployed: DigitalOcean App
+// Platform, spec in .do/app.yaml. This hostname is the ONLY client-side value
+// tied to the host — point it at a CNAME you control (signal.<your-domain>)
+// and moving providers becomes a DNS change instead of a redeploy.
 const IS_LOCAL = (location.hostname==="localhost" || location.hostname==="127.0.0.1");
 const SIGNAL_URL = IS_LOCAL
   ? "ws://"+location.hostname+":8001"
-  : "wss://sealwork-signal.onrender.com";
+  : "wss://sealwork-signal-hfs6h.ondigitalocean.app";
 let sigWs=null, pc=null, dc=null;
 
 // The deployed signaling server runs on a free tier that sleeps when idle and
