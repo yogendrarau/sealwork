@@ -451,7 +451,7 @@
       <button class="mini" id="btnRoom">Create room</button>
       <input id="joinCode" maxlength="4" placeholder="CODE" autocomplete="off">
       <button class="mini" id="btnJoin">Join room</button>
-      <span class="status" id="netStatus" style="margin:0">online duels need the signaling server (node server/signal.js)</span>
+      <span class="status" id="netStatus" style="margin:0">find a random opponent, or share a room code with a friend</span>
     </div>
   </div>
   </section>
@@ -1219,10 +1219,12 @@ function renderDuel(){
   if(duel.over && duel.result){ b.className = "duelbanner " + (duel.result === "win" ? "win" : "lose");
     b.textContent = duel.result === "win" ? "VICTORY" : "DEFEAT"; }
   else { b.className = "duelbanner"; b.textContent = ""; }
+  const online = duel.transport && duel.transport.kind === "rtc";
   $("duelStatus").textContent = !duel.active
     ? "not connected — start the camera first, then enter the duel"
     : duel.over ? "duel over — press Reset for a rematch"
-    : !oppKnown ? "waiting for opponent — open this page in a 2nd tab and Enter duel"
+    : !oppKnown ? (online ? "connected — waiting for your opponent to be ready…"
+                          : "waiting for opponent — open this page in a 2nd tab and Enter duel")
     : "dueling · weave fast, weave clean";
 }
 function renderCombo(){
@@ -1286,12 +1288,39 @@ renderBook(); renderDuel();
 // ===================================================================
 // Local dev: node server/signal.js (port 8001). Deployed: the Render
 // service from render.yaml — update the hostname if yours differs.
-const SIGNAL_URL = (location.hostname==="localhost" || location.hostname==="127.0.0.1")
+const IS_LOCAL = (location.hostname==="localhost" || location.hostname==="127.0.0.1");
+const SIGNAL_URL = IS_LOCAL
   ? "ws://"+location.hostname+":8001"
   : "wss://sealwork-signal.onrender.com";
 let sigWs=null, pc=null, dc=null;
 
+// The deployed signaling server runs on a free tier that sleeps when idle and
+// takes ~30-60s to wake. A cold connect either hangs or refuses outright, and
+// either way the honest thing is to say so and keep counting rather than look
+// frozen. The refused first attempt is itself what wakes the service, so one
+// automatic retry usually lands.
+// Messages are environment-split: on localhost a missing server is a real dev
+// error worth an actionable command, but a visitor must never be told to run
+// a Node script.
+const WAKE_HINT_MS = 2500;      // how long before we admit we're waiting
+const RETRY_DELAY_MS = 3000;
+const CONNECT_TIMEOUT_MS = 75000;
+let wakeTimer=null, wakeTick=null, deadTimer=null, netRetried=false, netT0=0;
+
 function netStatus(s){ $("netStatus").textContent=s; }
+
+function netClearTimers(){
+  if(wakeTimer){ clearTimeout(wakeTimer); wakeTimer=null; }
+  if(wakeTick){ clearInterval(wakeTick); wakeTick=null; }
+  if(deadTimer){ clearTimeout(deadTimer); deadTimer=null; }
+}
+
+function netGiveUp(){
+  netCleanup(); netClearTimers();
+  netStatus(IS_LOCAL
+    ? "signaling server unreachable — run: node server/signal.js (port 8001)"
+    : "couldn't reach the matchmaking server. Local duels still work — open this page in a second tab and press Enter duel.");
+}
 
 function localTransport(){
   const bc=new BroadcastChannel("sealwork-duel");
@@ -1302,26 +1331,63 @@ function localTransport(){
 }
 
 function netCleanup(){
-  if(sigWs){ sigWs.onmessage=null; sigWs.onerror=null; try{sigWs.close();}catch(e){} sigWs=null; }
+  // onclose is nulled too: closing a stale socket must never be mistaken for a
+  // failed connect and trigger the cold-start retry.
+  if(sigWs){ sigWs.onmessage=null; sigWs.onerror=null; sigWs.onclose=null;
+    try{sigWs.close();}catch(e){} sigWs=null; }
   if(pc){ try{pc.close();}catch(e){} pc=null; dc=null; }
 }
 
-function netConnect(action, code){
-  netCleanup();
+function netConnect(action, code, isRetry){
+  netCleanup(); netClearTimers();
+  if(!isRetry) netRetried=false;
   let ws;
-  try{ ws=new WebSocket(SIGNAL_URL); }catch(e){ netStatus("bad signaling URL"); return; }
+  try{ ws=new WebSocket(SIGNAL_URL); }
+  catch(e){ netGiveUp(); return; }
   sigWs=ws;
-  netStatus(action==="queue" ? "looking for an opponent…" : "contacting signaling server…");
-  ws.onopen=()=>ws.send(JSON.stringify(action==="join" ? {t:"join", code} : {t:action}));
+  netT0=Date.now();
+  netStatus(action==="queue" ? "looking for an opponent…" : "connecting…");
+
+  // don't sit silent through a cold start — start counting once it's clearly slow
+  const tick=()=>{
+    if(ws.readyState===1){ if(wakeTick){ clearInterval(wakeTick); wakeTick=null; } return; }
+    const s=Math.round((Date.now()-netT0)/1000);
+    netStatus(`waking the matchmaking server… ${s}s — it sleeps when idle, so the first duel of the day takes a moment`);
+  };
+  wakeTimer=setTimeout(()=>{
+    if(ws.readyState===1) return;
+    tick();                              // speak up straight away, then keep counting
+    wakeTick=setInterval(tick,1000);
+  }, WAKE_HINT_MS);
+  deadTimer=setTimeout(netGiveUp, CONNECT_TIMEOUT_MS);
+
+  ws.onopen=()=>{
+    netClearTimers();
+    netStatus(action==="queue" ? "looking for an opponent…" : "connected — pairing…");
+    ws.send(JSON.stringify(action==="join" ? {t:"join", code} : {t:action}));
+  };
   ws.onmessage=e=>{
     const m=JSON.parse(e.data);
     if(m.t==="room") netStatus(`room ${m.code} — send this code to your opponent`);
     else if(m.t==="paired") startRtc(ws, m.initiator);
     else if(m.t==="signal") handleSignal(m.data);
-    else if(m.t==="error") netStatus("error: "+m.msg);
+    else if(m.t==="error") netStatus(m.msg==="room not found"
+      ? "no room with that code — check it with your opponent and try again"
+      : "couldn't connect: "+m.msg);
     else if(m.t==="peer-left") netStatus("opponent left before connecting");
   };
-  ws.onerror=()=>{ if(!dc) netStatus("signaling server unreachable — run: node server/signal.js"); };
+  ws.onerror=()=>{};                      // onclose always follows; handle it there
+  ws.onclose=()=>{
+    if(dc) return;                        // already peer-to-peer, server's job is done
+    netClearTimers();
+    if(!netRetried && !IS_LOCAL){
+      netRetried=true;
+      netStatus("server was asleep — retrying…");
+      setTimeout(()=>netConnect(action, code, true), RETRY_DELAY_MS);
+      return;
+    }
+    netGiveUp();
+  };
 }
 
 function startRtc(ws, initiator){
