@@ -8,13 +8,31 @@
 //   client -> server:  {t:"create"} | {t:"join", code} | {t:"queue"} | {t:"signal", data}
 //   server -> client:  {t:"room", code} | {t:"paired", initiator} | {t:"signal", data}
 //                      | {t:"error", msg} | {t:"peer-left"}
+const http = require("http");
 const { WebSocketServer } = require("ws");
 
 const PORT = process.env.PORT || 8001;
-const wss = new WebSocketServer({ port: PORT });
 
 const rooms = new Map();   // code -> waiting host ws
 let queue = [];            // random-match waiting list
+
+// A bare WebSocketServer({port}) answers ordinary HTTP with 426 Upgrade
+// Required, which platform health checks read as unhealthy — the service then
+// restart-loops forever while WebSockets themselves work fine. Attaching to an
+// explicit HTTP server gives the checker a 200 to hit, and the payload doubles
+// as a cheap liveness probe when a duel won't connect.
+const server = http.createServer((req, res) => {
+  const path = (req.url || "/").split("?")[0];
+  if (path === "/" || path === "/health") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true, rooms: rooms.size, queued: queue.length,
+                             uptime: Math.round(process.uptime()) }));
+    return;
+  }
+  res.writeHead(404, { "content-type": "text/plain" });
+  res.end("not found");
+});
+const wss = new WebSocketServer({ server });
 
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";  // no 0/O/1/I/L lookalikes
 function newCode() {
@@ -66,4 +84,7 @@ wss.on("connection", ws => {
   ws.on("close", () => cleanup(ws));
 });
 
-console.log(`sealwork signaling server on :${PORT}`);
+// bind 0.0.0.0, not the default loopback — container platforms route in from outside
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`sealwork signaling server on :${PORT}`);
+});

@@ -1,0 +1,43 @@
+# DigitalOcean App Platform spec for the signaling server.
+#
+# App Platform is the right fit here rather than a Droplet: browsers refuse a
+# ws:// connection from an https:// page, so the signaling server MUST have a
+# valid TLS certificate — and you cannot issue one for a bare IP address.
+# App Platform hands you an https/wss hostname with a managed cert; a Droplet
+# would mean buying a domain first, then nginx + certbot + systemd to serve a
+# 90-line script.
+#
+# Deploy either by pointing the App Platform UI at this repo, or with doctl:
+#   doctl apps create --spec .do/app.yaml
+#
+# After the first deploy, copy the app's hostname into SIGNAL_URL in
+# web/index.html and push — that one line is the only client-side change.
+name: sealwork-signal
+region: nyc
+
+services:
+  - name: signal
+    github:
+      repo: yogendrarau/sealwork
+      branch: main
+      deploy_on_push: true
+
+    source_dir: server
+    environment_slug: node-js
+    build_command: npm install
+    run_command: node signal.js
+
+    # smallest paid instance; confirm the current slug in the UI, DO renames these
+    instance_size_slug: basic-xxs
+    instance_count: 1
+
+    # App Platform injects PORT (8080) and the server reads it
+    http_port: 8080
+
+    # /health returns 200 JSON. Without an HTTP route a bare ws server answers
+    # 426 Upgrade Required, which reads as unhealthy and restart-loops.
+    health_check:
+      http_path: /health
+
+    routes:
+      - path: /

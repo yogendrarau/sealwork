@@ -72,12 +72,30 @@ python -m http.server 8000 --directory web     # → http://localhost:8000
 
 # online duels (optional)
 cd server && npm install && node signal.js     # port 8001
+curl localhost:8001/health                     # {"ok":true,...}
 
 # retrain (needs pytorch; CPU is fine, ~2 min)
 python train.py
 python web/export_onnx.py
 # copy models/{mlp.onnx,signs.json,parity.json} → web/
 ```
+
+## Deploying
+
+`web/` is static — GitHub Pages serves it from the workflow in `.github/`.
+Only the signaling server needs a host, and only for online duels; the codex,
+drills, and local 2-tab duels need no backend at all.
+
+The server must be reachable over **wss://**, since a browser blocks a plain
+`ws://` connection opened from an https page. That rules out a bare IP: TLS
+needs a hostname. Any platform that terminates TLS for you works — `render.yaml`
+and `.do/app.yaml` are both here. Point `SIGNAL_URL` in `web/index.html` at
+whichever you use.
+
+Free tiers sleep when idle and take ~30–60s to wake. The client handles this
+honestly (it says so, counts the seconds, and retries once) rather than
+pretending to hang, so a free tier is a legitimate choice — it just costs the
+first duel of the day a slow start.
 
 ## Roadmap
 
