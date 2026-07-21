@@ -3,107 +3,227 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Sealwork — Naruto Sign Recognizer</title>
+<title>Sealwork — weave Naruto hand seals at your webcam</title>
+<meta name="description" content="Weave the twelve Naruto hand seals at your webcam to cast jutsu. Drill combos against the clock or duel over WebRTC. Landmark-based recognition running entirely in your browser — no video ever leaves your machine." />
+<meta name="theme-color" content="#0a0d12" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Sealwork — weave Naruto hand seals at your webcam" />
+<meta property="og:description" content="A 66K-parameter model reads the twelve hand seals from landmark geometry, in-browser, at ~2ms per frame. Drill combos or duel peer-to-peer." />
+<meta property="og:url" content="https://yogendrarau.github.io/sealwork/" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='13' fill='%230a0d12'/><text x='32' y='47' font-size='42' text-anchor='middle' fill='%23e2483d' font-family='serif'>%E5%B0%81</text></svg>" />
 <style>
   :root{
-    --ink:#0b0e13;          /* near-black sumi ink */
-    --ink-2:#141a23;        /* raised panel */
+    --ink:#0a0d12;          /* near-black sumi ink */
+    --ink-2:#111720;        /* raised panel */
+    --ink-3:#070a0e;        /* recessed well */
     --paper:#e8e2d4;        /* aged scroll */
     --paper-dim:#9aa0a8;
+    --paper-faint:#5a6270;  /* decorative only — below AA, never load-bearing */
     --vermilion:#e2483d;    /* hanko seal red */
     --vermilion-deep:#a8281f;
     --jade:#3fb98a;         /* success / chakra */
     --gold:#d9a441;
-    --line:#252d38;
+    --line:#212936;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --serif:"Hiragino Mincho ProN","Yu Mincho",Georgia,"Times New Roman",serif;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;background:var(--ink);color:var(--paper);
-    font-family:"Hiragino Mincho ProN","Yu Mincho",Georgia,"Times New Roman",serif;}
-  .wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px;}
+  html,body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--serif);
+    -webkit-font-smoothing:antialiased;}
+  body{background-image:radial-gradient(900px 520px at 50% -8%,#151d29 0%,rgba(10,13,18,0) 65%);
+    background-repeat:no-repeat;background-attachment:fixed;}
+  .wrap{max-width:1040px;margin:0 auto;padding:26px 20px 40px;}
+  a{color:var(--gold)}
 
-  header{display:flex;align-items:baseline;gap:16px;border-bottom:1px solid var(--line);
-    padding-bottom:14px;margin-bottom:22px;}
-  .mark{font-size:30px;letter-spacing:.18em;font-weight:700;color:var(--paper);}
-  .mark b{color:var(--vermilion);}
-  .sub{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;
-    letter-spacing:.28em;text-transform:uppercase;color:var(--paper-dim);}
+  /* ---- header ---- */
+  header{display:flex;align-items:center;justify-content:space-between;gap:18px;
+    flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:20px;}
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand .glyph{font-size:38px;line-height:1;color:var(--vermilion);
+    text-shadow:0 0 22px rgba(226,72,61,.35)}
+  .mark{font-size:26px;letter-spacing:.2em;font-weight:700;line-height:1.1}
+  .sub{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--paper-dim);margin-top:5px}
+  .hmeta{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .badge{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--paper-dim);
+    border:1px solid var(--line);border-radius:999px;padding:5px 11px;white-space:nowrap}
+  .badge b{color:var(--paper);font-weight:600}
+  a.badge{text-decoration:none;color:var(--paper-dim)}
+  a.badge:hover{border-color:var(--vermilion);color:var(--paper)}
+  @media(max-width:620px){
+    header{gap:12px}
+    .brand .glyph{font-size:31px}
+    .mark{font-size:21px}
+    .hmeta .badge{padding:4px 9px}
+  }
 
-  .stage{display:grid;grid-template-columns:1.4fr .9fr;gap:18px;}
+  /* ---- hero stage ---- */
+  .stage{display:grid;grid-template-columns:1.35fr .95fr;gap:16px;}
   @media(max-width:760px){.stage{grid-template-columns:1fr}}
 
   .videobox{position:relative;background:#000;border:1px solid var(--line);
-    border-radius:10px;overflow:hidden;aspect-ratio:4/3;}
+    border-radius:12px;overflow:hidden;aspect-ratio:4/3;}
+  .videobox.hurt{animation:hurt .42s ease-out}
+  @keyframes hurt{
+    0%{box-shadow:inset 0 0 0 0 rgba(226,72,61,0);border-color:var(--line)}
+    12%{box-shadow:inset 0 0 90px 12px rgba(226,72,61,.6);border-color:var(--vermilion)}
+    100%{box-shadow:inset 0 0 0 0 rgba(226,72,61,0);border-color:var(--line)}
+  }
   video,canvas.overlay{position:absolute;inset:0;width:100%;height:100%;
     object-fit:cover;}
   video{transform:scaleX(-1);}          /* selfie display only */
   canvas.overlay{pointer-events:none}   /* landmarks arrive already mirrored */
 
-  .readout{background:var(--ink-2);border:1px solid var(--line);border-radius:10px;
-    padding:20px;display:flex;flex-direction:column;}
-  .nowlabel{font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.24em;
+  /* camera-off placeholder: also where the privacy promise lives */
+  .camoff{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:8px;text-align:center;padding:24px;
+    background:radial-gradient(circle at 50% 42%,#131a24 0%,#05070a 78%)}
+  .camoff.hide{display:none}
+  .camoff .g{font-size:54px;color:var(--vermilion);opacity:.5;line-height:1}
+  .camoff p{margin:0;font-family:var(--mono);font-size:11px;letter-spacing:.24em;
+    text-transform:uppercase;color:var(--paper-dim)}
+  .camoff small{font-family:var(--mono);font-size:10.5px;color:var(--paper-faint);
+    max-width:34ch;line-height:1.6}
+
+  /* cast moment: the jutsu gets a beat over the video */
+  .castfx{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:2px;pointer-events:none;opacity:0;}
+  .castfx.show{animation:castpop .95s ease-out forwards}
+  .castfx .ck{font-size:82px;line-height:1;font-weight:700;
+    text-shadow:0 0 40px currentColor}
+  .castfx .cn{font-family:var(--mono);font-size:14px;letter-spacing:.3em;
+    text-transform:uppercase;color:var(--paper)}
+  .castfx.dmg{color:var(--vermilion)} .castfx.heal{color:var(--jade)}
+  @keyframes castpop{
+    0%{opacity:0;transform:scale(.72)}
+    18%{opacity:1;transform:scale(1.06)}
+    32%{transform:scale(1)}
+    72%{opacity:1}
+    100%{opacity:0;transform:scale(1.02)}
+  }
+  @media(prefers-reduced-motion:reduce){
+    .castfx.show{animation:castfade .95s ease-out forwards}
+    @keyframes castfade{0%,72%{opacity:1}100%{opacity:0}}
+  }
+
+  .readout{background:var(--ink-2);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;display:flex;flex-direction:column;}
+  .nowlabel{font-family:var(--mono);font-size:10.5px;letter-spacing:.24em;
     text-transform:uppercase;color:var(--paper-dim);}
-  .sign{font-size:54px;line-height:1.05;font-weight:700;margin:6px 0 2px;
+  .sign{font-size:48px;line-height:1.05;font-weight:700;margin:6px 0 2px;
     text-transform:capitalize;}
   .sign.idle{color:var(--paper-dim);}
   .sign.live{color:var(--jade);}
-  .conf{font-family:ui-monospace,monospace;font-size:13px;color:var(--paper-dim);}
-  .bar{height:6px;background:#0c1117;border-radius:3px;margin-top:10px;overflow:hidden}
+  .conf{font-family:var(--mono);font-size:12.5px;color:var(--paper-dim);}
+  .bar{height:6px;background:var(--ink-3);border-radius:3px;margin-top:10px;overflow:hidden}
   .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--vermilion),var(--gold));
     transition:width .08s linear}
 
-  .hands{margin-top:16px;font-family:ui-monospace,monospace;font-size:12px;
+  .hands{margin-top:14px;font-family:var(--mono);font-size:11.5px;
     color:var(--paper-dim);letter-spacing:.04em}
   .hands b{color:var(--paper)}
 
-  .ranks{margin-top:auto;padding-top:16px;border-top:1px solid var(--line)}
-  .rk{display:flex;justify-content:space-between;font-family:ui-monospace,monospace;
-    font-size:12px;padding:3px 0;color:var(--paper-dim)}
+  .ranks{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
+  .rk{display:flex;justify-content:space-between;font-family:var(--mono);
+    font-size:11.5px;padding:3px 0;color:var(--paper-dim)}
   .rk span:first-child{text-transform:capitalize}
   .rk.lead span{color:var(--paper)}
 
-  .status{margin-top:18px;font-family:ui-monospace,monospace;font-size:12px;
-    color:var(--paper-dim);min-height:18px}
+  .status{margin-top:14px;font-family:var(--mono);font-size:11.5px;
+    color:var(--paper-dim);min-height:18px;line-height:1.5}
   .status.err{color:var(--vermilion)}
   .status.ok{color:var(--jade)}
 
   button{font:inherit;background:var(--vermilion);color:#fff;border:0;
-    padding:11px 20px;border-radius:8px;letter-spacing:.08em;cursor:pointer;
-    font-size:14px;margin-top:18px}
+    padding:12px 24px;border-radius:8px;letter-spacing:.1em;cursor:pointer;
+    font-size:14px;font-weight:700}
   button:hover{background:var(--vermilion-deep)}
   button:disabled{background:#3a2421;color:#8a6a66;cursor:default}
+  button:focus-visible,.tab:focus-visible,select:focus-visible,input:focus-visible{
+    outline:2px solid var(--gold);outline-offset:2px}
 
-  .selftest{margin-top:14px;font-family:ui-monospace,monospace;font-size:11px;
-    letter-spacing:.06em;color:var(--paper-dim)}
+  /* start strip under the hero: button + what the system is doing */
+  .startbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:16px}
+  .sysline{flex:1;min-width:240px}
+  .sysline .status{margin-top:0}
+  .selftest{margin-top:5px;font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.04em;color:var(--paper-faint);line-height:1.5}
   .selftest.pass{color:var(--jade)} .selftest.fail{color:var(--vermilion)}
 
+  /* ---- tabs ---- */
+  .tabs{display:flex;gap:2px;margin-top:26px;border-bottom:1px solid var(--line);
+    overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{font:inherit;background:none;border:0;border-bottom:2px solid transparent;
+    color:var(--paper-dim);padding:11px 18px;margin:0;border-radius:0;cursor:pointer;
+    font-size:13px;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;
+    font-weight:400;transition:color .12s}
+  .tab:hover{background:none;color:var(--paper)}
+  .tab .tk{color:var(--paper-faint);margin-right:7px;font-family:var(--serif)}
+  .tab[aria-selected="true"]{color:var(--paper);border-bottom-color:var(--vermilion)}
+  .tab[aria-selected="true"] .tk{color:var(--vermilion)}
+  /* tighten so all four tabs fit a 375px phone without needing the scroll */
+  @media(max-width:430px){
+    .tab{padding:10px 11px;font-size:12px;letter-spacing:.08em}
+    .tab .tk{margin-right:5px}
+  }
+  .tabpanel[hidden]{display:none}
+  .tabpanel{padding-top:22px}
+  .lede{font-family:var(--mono);font-size:11.5px;color:var(--paper-dim);
+    line-height:1.7;margin:0 0 18px;max-width:70ch}
+  .lede b{color:var(--paper);font-weight:600}
+
+  /* ---- codex ---- */
+  .codex{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
+  .card{position:relative;background:var(--ink-2);border:1px solid var(--line);
+    border-radius:10px;padding:14px;overflow:hidden;
+    transition:border-color .12s,background .12s}
+  .card .k{font-size:34px;line-height:1;color:var(--paper-dim);transition:color .12s}
+  .card .rom{font-family:var(--mono);font-size:10px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--paper-faint);margin-top:8px}
+  .card .en{font-size:19px;font-weight:700;text-transform:capitalize;margin-top:2px;
+    transition:color .12s}
+  .card .desc{font-family:var(--mono);font-size:10.5px;line-height:1.65;
+    color:var(--paper-dim);margin-top:8px}
+  .card .cbar{height:3px;background:var(--ink-3);border-radius:2px;margin-top:11px;overflow:hidden}
+  .card .cbar>i{display:block;height:100%;width:0;background:var(--jade);
+    transition:width .1s linear}
+  .card.lit{border-color:var(--jade);background:#101d1a}
+  .card.lit .k,.card.lit .en{color:var(--jade)}
+  .card.hard{border-style:dashed}
+  .card .flag{position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:9px;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--gold);opacity:.8}
+
   /* ---- committed-fire readout ---- */
-  .committed{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
-  .cmlabel{font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.24em;
+  .committed{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .cmlabel{font-family:var(--mono);font-size:10.5px;letter-spacing:.24em;
     text-transform:uppercase;color:var(--paper-dim)}
-  .fire{font-size:38px;font-weight:700;text-transform:capitalize;margin:4px 0 2px;
+  .fire{font-size:34px;font-weight:700;text-transform:capitalize;margin:4px 0 2px;
     color:var(--paper-dim);transition:transform .06s ease-out}
   .fire.go{color:var(--jade)} .fire.bad{color:var(--vermilion)}
   .fire.flash{transform:scale(1.14)}
-  .fmeta{font-family:ui-monospace,monospace;font-size:11px;color:var(--paper-dim)}
+  .fmeta{font-family:var(--mono);font-size:10.5px;color:var(--paper-dim)}
 
-  /* ---- tuning panel ---- */
-  .panel{margin-top:26px;background:var(--ink-2);border:1px solid var(--line);
-    border-radius:10px;padding:20px}
-  .panel h3{margin:0 0 16px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;
-    color:var(--paper-dim);font-family:ui-monospace,monospace;font-weight:600}
+  /* ---- panels (inside tabs) ---- */
+  .panel{background:var(--ink-2);border:1px solid var(--line);
+    border-radius:12px;padding:20px}
+  .panel + .panel{margin-top:16px}
+  .panel h3{margin:0 0 16px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--paper-dim);font-family:var(--mono);font-weight:600}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 28px}
   @media(max-width:680px){.grid{grid-template-columns:1fr}}
   .ctl{display:flex;flex-direction:column;gap:5px}
-  .ctl label{font-family:ui-monospace,monospace;font-size:11px;color:var(--paper-dim);
-    display:flex;justify-content:space-between}
+  .ctl label{font-family:var(--mono);font-size:11px;color:var(--paper-dim);
+    display:flex;justify-content:space-between;gap:10px}
   .ctl label b{color:var(--gold)}
   .ctl input[type=range]{width:100%;accent-color:var(--vermilion)}
   .row{display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-top:16px}
-  .chk{font-family:ui-monospace,monospace;font-size:12px;color:var(--paper);
+  .chk{font-family:var(--mono);font-size:11.5px;color:var(--paper);
     display:flex;gap:7px;align-items:center;cursor:pointer}
   select{font:inherit;background:var(--ink);color:var(--paper);border:1px solid var(--line);
-    border-radius:6px;padding:4px 8px;font-size:13px}
-  #joinCode{font-family:ui-monospace,monospace;background:var(--ink);color:var(--paper);
+    border-radius:6px;padding:5px 9px;font-size:13px}
+  #joinCode{font-family:var(--mono);background:var(--ink);color:var(--paper);
     border:1px solid var(--line);border-radius:7px;padding:7px 10px;width:82px;
     text-transform:uppercase;letter-spacing:.22em;font-size:13px}
   #joinCode::placeholder{color:#4a5361;letter-spacing:.1em}
@@ -111,57 +231,61 @@
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}
   @media(max-width:680px){.stats{grid-template-columns:repeat(2,1fr)}}
   .stat{background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
-  .stat .k{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.14em;
+  .stat .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;
     text-transform:uppercase;color:var(--paper-dim)}
-  .stat .v{font-family:ui-monospace,monospace;font-size:22px;color:var(--paper);margin-top:4px}
+  .stat .v{font-family:var(--mono);font-size:21px;color:var(--paper);margin-top:4px}
   .stat .v small{font-size:12px;color:var(--paper-dim)}
 
-  .log{margin-top:16px;font-family:ui-monospace,monospace;font-size:12px;
+  .log{margin-top:16px;font-family:var(--mono);font-size:11.5px;
     max-height:150px;overflow:auto;border-top:1px solid var(--line);padding-top:10px}
-  .log .e{display:flex;justify-content:space-between;padding:2px 0;color:var(--paper-dim)}
+  .log .e{display:flex;justify-content:space-between;gap:12px;padding:2px 0;color:var(--paper-dim)}
   .log .e b{text-transform:capitalize}
   .log .e.ok b{color:var(--jade)} .log .e.bad b{color:var(--vermilion)}
-  .log:empty::before{content:"no fires yet — form a seal";color:var(--paper-dim)}
+  .log:empty::before{content:"no fires yet — form a seal";color:var(--paper-faint)}
 
   .mini{font:inherit;background:var(--ink);color:var(--paper);border:1px solid var(--line);
-    padding:7px 11px;border-radius:7px;font-size:12px;margin:0;cursor:pointer}
+    padding:8px 13px;border-radius:7px;font-size:12px;margin:0;cursor:pointer;
+    letter-spacing:.04em;font-weight:400}
   .mini:hover{border-color:var(--vermilion);background:var(--ink-2)}
 
   /* ---- duel ---- */
-  .duel{margin-top:26px;background:var(--ink-2);border:1px solid var(--line);border-radius:10px;padding:20px}
-  .duel h3{margin:0 0 16px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;
-    color:var(--paper-dim);font-family:ui-monospace,monospace;font-weight:600}
+  .duel{background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:20px}
+  .duel h3{margin:0 0 16px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--paper-dim);font-family:var(--mono);font-weight:600}
   .hpwrap{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:16px}
   @media(max-width:680px){.hpwrap{grid-template-columns:1fr}}
-  .hpcard .who{font-family:ui-monospace,monospace;font-size:12px;letter-spacing:.08em;
-    color:var(--paper-dim);display:flex;justify-content:space-between}
+  .hpcard .who{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;
+    color:var(--paper-dim);display:flex;justify-content:space-between;gap:10px}
   .hpcard .who b{color:var(--paper)}
   .hpbar{height:16px;background:#0c1117;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:6px}
   .hpbar>i{display:block;height:100%;width:100%;transition:width .18s ease-out}
   .hpbar.you>i{background:linear-gradient(90deg,var(--jade),#6fe0b0)}
   .hpbar.opp>i{background:linear-gradient(90deg,var(--vermilion-deep),var(--vermilion))}
 
-  .combo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:42px;
+  .combo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:44px;
     background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:14px}
   .combo .seal{font-size:16px;text-transform:capitalize;color:var(--gold);font-weight:700}
-  .combo .arrow{color:var(--paper-dim)}
-  .combo .hint{font-family:ui-monospace,monospace;font-size:11px;color:var(--paper-dim);margin-left:auto}
+  .combo .arrow{color:var(--paper-faint)}
+  .combo .hint{font-family:var(--mono);font-size:11px;color:var(--paper-dim);margin-left:auto}
   .combo.locked{border-color:var(--vermilion)}
-  .combo .idle{color:var(--paper-dim);font-family:ui-monospace,monospace;font-size:12px}
+  .combo .idle{color:var(--paper-dim);font-family:var(--mono);font-size:11.5px}
 
   .duelgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   @media(max-width:680px){.duelgrid{grid-template-columns:1fr}}
-  .book .a{display:flex;justify-content:space-between;gap:10px;font-family:ui-monospace,monospace;
-    font-size:12px;padding:5px 0;border-bottom:1px dashed var(--line)}
+  .book .a{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    font-family:var(--mono);font-size:11.5px;padding:6px 0;border-bottom:1px dashed var(--line)}
   .book .a .chain b{color:var(--gold);text-transform:capitalize;font-weight:700}
+  .book .a .jk{font-family:var(--serif);font-size:15px;color:var(--paper-dim);margin-right:7px}
   .book .a .amt.dmg{color:var(--vermilion)} .book .a .amt.heal{color:var(--jade)}
-  .feed{font-family:ui-monospace,monospace;font-size:12px;max-height:160px;overflow:auto}
+  .book .a .amt{white-space:nowrap}
+  .feed{font-family:var(--mono);font-size:11.5px;max-height:160px;overflow:auto}
   .feed .c{padding:2px 0;color:var(--paper-dim)}
   .feed .c b{text-transform:capitalize}
   .feed .c.you b{color:var(--jade)} .feed .c.opp b{color:var(--vermilion)}
+  .feed:empty::before{content:"no casts yet";color:var(--paper-faint)}
 
-  .duelbanner{text-align:center;font-size:30px;font-weight:700;padding:12px;margin-top:14px;
-    border-radius:8px;display:none;letter-spacing:.12em}
+  .duelbanner{text-align:center;font-size:28px;font-weight:700;padding:12px;margin-top:14px;
+    border-radius:8px;display:none;letter-spacing:.16em}
   .duelbanner.win{display:block;color:var(--jade);border:1px solid var(--jade)}
   .duelbanner.lose{display:block;color:var(--vermilion);border:1px solid var(--vermilion)}
 
@@ -169,35 +293,60 @@
   .prow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .parena{margin-top:16px;background:var(--ink);border:1px solid var(--line);border-radius:8px;
     padding:22px;display:flex;flex-direction:column;align-items:center;gap:10px}
-  .pname{font-size:30px;font-weight:700;letter-spacing:.04em}
-  .pname.idle{color:var(--paper-dim);font-size:18px}
+  .pname{font-size:28px;font-weight:700;letter-spacing:.04em}
+  .pname.idle{color:var(--paper-dim);font-size:17px}
   .pseq{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;min-height:30px}
-  .pseq .ps{font-size:17px;text-transform:capitalize;padding:3px 12px;border-radius:6px;
+  .pseq .ps{font-size:16px;text-transform:capitalize;padding:3px 12px;border-radius:6px;
     border:1px solid var(--line);color:var(--paper-dim)}
   .pseq .ps.done{color:var(--jade);border-color:var(--jade)}
   .pseq .ps.next{color:var(--gold);border-color:var(--gold);font-weight:700}
-  .ptimer{font-family:ui-monospace,monospace;font-size:40px;color:var(--paper);line-height:1}
+  .ptimer{font-family:var(--mono);font-size:38px;color:var(--paper);line-height:1}
   .ptimer.run{color:var(--gold)}
   .ptimer.fail{color:var(--vermilion)}
-  .pmeta{font-family:ui-monospace,monospace;font-size:12px;color:var(--paper-dim);min-height:16px}
+  .pmeta{font-family:var(--mono);font-size:11.5px;color:var(--paper-dim);min-height:16px}
   .pmeta b{color:var(--gold)}
   .pmeta.newpb{color:var(--gold);font-weight:700}
   .grade{font-weight:700}
   .grade.S{color:var(--gold)} .grade.A{color:var(--jade)}
   .grade.B{color:var(--paper)} .grade.C{color:var(--paper-dim)}
+
+  /* ---- footer ---- */
+  footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
+    font-family:var(--mono);font-size:10.5px;color:var(--paper-faint);line-height:1.7}
+  footer a{color:var(--paper-dim);text-decoration:none;border-bottom:1px solid var(--line)}
+  footer a:hover{color:var(--paper);border-bottom-color:var(--vermilion)}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="mark">封 <b>SEALWORK</b></div>
-    <div class="sub">hand-seal recognizer · v0</div>
+    <div class="brand">
+      <span class="glyph">封</span>
+      <div>
+        <div class="mark">SEALWORK</div>
+        <div class="sub">weave the twelve seals · cast jutsu · duel</div>
+      </div>
+    </div>
+    <div class="hmeta">
+      <span class="badge"><b>95.5%</b> held-out</span>
+      <span class="badge"><b>260</b> KB model</span>
+      <span class="badge"><b id="hInf">—</b> ms / frame</span>
+      <a class="badge" href="https://github.com/yogendrarau/sealwork"
+         target="_blank" rel="noopener">source ↗</a>
+    </div>
   </header>
 
   <div class="stage">
     <div class="videobox">
       <video id="cam" playsinline muted></video>
       <canvas id="overlay" class="overlay"></canvas>
+      <div class="camoff" id="camoff">
+        <span class="g">封</span>
+        <p>camera off</p>
+        <small>everything runs in your browser — no video ever leaves your machine</small>
+      </div>
+      <div class="castfx" id="castfx"><span class="ck"></span><span class="cn"></span></div>
     </div>
 
     <div class="readout">
@@ -218,10 +367,34 @@
     </div>
   </div>
 
-  <button id="start">Start camera</button>
-  <div id="status" class="status">Click start. The model self-test runs first.</div>
-  <div id="selftest" class="selftest">parity self-test: not run</div>
+  <div class="startbar">
+    <button id="start">Start camera</button>
+    <div class="sysline">
+      <div id="status" class="status">Grant camera access to begin. A parity self-test runs before any prediction is trusted.</div>
+      <div id="selftest" class="selftest">parity self-test: not run</div>
+    </div>
+  </div>
 
+  <nav class="tabs" role="tablist" aria-label="Modes">
+    <button class="tab" role="tab" id="tab-codex"  aria-controls="panel-codex"  aria-selected="true"><span class="tk">封</span>Codex</button>
+    <button class="tab" role="tab" id="tab-drills" aria-controls="panel-drills" aria-selected="false"><span class="tk">修</span>Drills</button>
+    <button class="tab" role="tab" id="tab-duel"   aria-controls="panel-duel"   aria-selected="false"><span class="tk">戦</span>Duel</button>
+    <button class="tab" role="tab" id="tab-lab"    aria-controls="panel-lab"    aria-selected="false"><span class="tk">研</span>Lab</button>
+  </nav>
+
+  <!-- ============ CODEX ============ -->
+  <section class="tabpanel" id="panel-codex" role="tabpanel" aria-labelledby="tab-codex">
+    <p class="lede">The twelve seals of the zodiac. Start the camera and hold a shape —
+      <b>the matching card lights up live</b>, so the model itself tells you when you
+      have it. Descriptions are a starting point; the recognizer is the referee.</p>
+    <div class="codex" id="codex"></div>
+  </section>
+
+  <!-- ============ DRILLS ============ -->
+  <section class="tabpanel" id="panel-drills" role="tabpanel" aria-labelledby="tab-drills" hidden>
+    <p class="lede">Pick a jutsu, weave its chain against the clock. The timer starts on
+      your first committed seal and grades you on <b>time per transition</b> — personal
+      bests are kept in this browser. Break the chain and you restart from the top.</p>
   <div class="panel">
     <h3>Practice · jutsu drills</h3>
     <div class="prow">
@@ -237,7 +410,13 @@
     </div>
     <div class="log" id="pLog"></div>
   </div>
+  </section>
 
+  <!-- ============ DUEL ============ -->
+  <section class="tabpanel" id="panel-duel" role="tabpanel" aria-labelledby="tab-duel" hidden>
+    <p class="lede">Weave a full chain to cast. Longer chains hit harder — the reward for
+      clean, fast weaving. Break a chain mid-combo and you eat a <b>0.7s stun</b>, which is
+      the real cost of a misfire. Play locally in two tabs, or duel a stranger peer-to-peer.</p>
   <div class="duel">
     <h3>Duel · real-time 1v1</h3>
     <div class="hpwrap">
@@ -275,7 +454,14 @@
       <span class="status" id="netStatus" style="margin:0">online duels need the signaling server (node server/signal.js)</span>
     </div>
   </div>
+  </section>
 
+  <!-- ============ LAB ============ -->
+  <section class="tabpanel" id="panel-lab" role="tabpanel" aria-labelledby="tab-lab" hidden>
+    <p class="lede">The commitment layer, exposed. A cast fires on a short <b>confident
+      plateau</b> — not a slow hold — which is what reconciles weaving speed with misfire
+      safety. Every threshold below is live; drag one and watch fire accuracy and commit
+      latency move against each other. Set an expected sign to score yourself honestly.</p>
   <div class="panel">
     <h3>Stabilizer tuning · speed ↔ fairness</h3>
     <div class="grid">
@@ -321,6 +507,18 @@
 
     <div class="log" id="log"></div>
   </div>
+  </section>
+
+  <footer>
+    <div>
+      webcam → MediaPipe landmarks → 66K-param MLP → ONNX Runtime Web.<br>
+      Nothing is uploaded; inference runs on your CPU.
+    </div>
+    <div>
+      <a href="https://github.com/yogendrarau/sealwork" target="_blank" rel="noopener">source on GitHub ↗</a><br>
+      95.5% on a per-class temporal split · 260 KB model
+    </div>
+  </footer>
 </div>
 
 <!-- MediaPipe Hands + ONNX Runtime Web from CDN -->
@@ -339,6 +537,82 @@ let PARITY = null;     // {raw:[63], logits:[n]}
 
 const $ = id => document.getElementById(id);
 let session = null;
+
+// ---- seal codex: zodiac kanji + how to actually make the shape ----
+// The model learned from one person's hands, so these descriptions are a
+// starting point, not ground truth — the live card highlight is the referee.
+// tiger/ram are near-identical in landmark space (the documented ~14% confusion),
+// so their entries call out the one difference that separates them.
+const SEAL_INFO = {
+  rat:    {k:"子", rom:"Ne",      d:"Hands clasped, right index and middle pressed flat against the left palm."},
+  ox:     {k:"丑", rom:"Ushi",    d:"Left hand flat and level; right index and middle laid across it, pointing out."},
+  tiger:  {k:"寅", rom:"Tora",    d:"Palms pressed together, index and middle of both hands straight up.", hard:"vs ram"},
+  hare:   {k:"卯", rom:"U",       d:"Left hand a loose fist; right index and middle raised behind it like ears."},
+  dragon: {k:"辰", rom:"Tatsu",   d:"Hands crossed at the wrist, fingers loosely interlocked, palms open."},
+  snake:  {k:"巳", rom:"Mi",      d:"Palms flat together, every finger laced through the other hand."},
+  horse:  {k:"午", rom:"Uma",     d:"Fingertips together pointing up, thumbs crossed low — a steepled prayer."},
+  ram:    {k:"未", rom:"Hitsuji", d:"Like tiger, but the remaining fingers interlock instead of folding in.", hard:"vs tiger"},
+  monkey: {k:"申", rom:"Saru",    d:"Left hand flat on top of the right, both palms down, fingers crossed."},
+  boar:   {k:"亥", rom:"I",       d:"Both hands in fists, knuckles and wrists pressed together, palms down."},
+  dog:    {k:"戌", rom:"Inu",     d:"Left hand flat, palm down; right hand a fist resting on the back of it."},
+  bird:   {k:"酉", rom:"Tori",    d:"Fingers interlocked with thumbs and index fingers extended outward."},
+};
+
+// ---- tabs ----
+const TABS = ["codex","drills","duel","lab"];
+function selectTab(name){
+  TABS.forEach(t => {
+    const on = t === name;
+    $("tab-"+t).setAttribute("aria-selected", on ? "true" : "false");
+    $("panel-"+t).hidden = !on;
+  });
+}
+TABS.forEach(t => {
+  $("tab-"+t).addEventListener("click", () => selectTab(t));
+  // roving arrow-key navigation between tabs
+  $("tab-"+t).addEventListener("keydown", e => {
+    const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if(!d) return;
+    e.preventDefault();
+    const next = TABS[(TABS.indexOf(t) + d + TABS.length) % TABS.length];
+    selectTab(next); $("tab-"+next).focus();
+  });
+});
+selectTab("codex");
+
+// ---- codex render + live highlight ----
+// Cards are built from SIGNS order so a retrained model with different classes
+// still renders correctly; "none" is skipped (it is not a seal you can form).
+let _litIdx = -1, _litBar = null;
+function renderCodex(){
+  $("codex").innerHTML = SIGNS.map((s,i) => {
+    if(i === NONE_IDX) return "";
+    const info = SEAL_INFO[s] || {k:"?", rom:s, d:""};
+    return `<div class="card${info.hard?" hard":""}" id="card-${i}">`
+         + (info.hard ? `<span class="flag">${info.hard}</span>` : "")
+         + `<div class="k">${info.k}</div>`
+         + `<div class="rom">${info.rom}</div>`
+         + `<div class="en">${s}</div>`
+         + `<div class="desc">${info.d}</div>`
+         + `<div class="cbar"><i></i></div></div>`;
+  }).join("");
+}
+// called every frame — only mutate classes when the lit card actually changes
+function litCodex(idx, conf){
+  if(idx !== _litIdx){
+    if(_litIdx >= 0){
+      const prev = $("card-"+_litIdx);
+      if(prev){ prev.classList.remove("lit"); prev.querySelector(".cbar>i").style.width = "0%"; }
+    }
+    _litIdx = idx;
+    _litBar = null;
+    if(idx >= 0){
+      const el = $("card-"+idx);
+      if(el){ el.classList.add("lit"); _litBar = el.querySelector(".cbar>i"); }
+    }
+  }
+  if(_litBar) _litBar.style.width = (conf*100).toFixed(0)+"%";
+}
 
 // ===================================================================
 // Stabilizer: plateau-based, fire-once commitment layer.
@@ -525,17 +799,59 @@ function renderRanks(probs){
 
 let hands=null, video=null, overlay=null, octx=null, mirror=null, mctx=null;
 
+// MediaPipe's 21-landmark hand topology: 5 finger chains + the palm arch.
+const HAND_BONES=[
+  [0,1],[1,2],[2,3],[3,4],            // thumb
+  [0,5],[5,6],[6,7],[7,8],            // index
+  [5,9],[9,10],[10,11],[11,12],       // middle
+  [9,13],[13,14],[14,15],[15,16],     // ring
+  [13,17],[17,18],[18,19],[19,20],    // pinky
+  [0,17],                             // palm base
+];
+// A commit flashes the skeleton so the fire is felt on the video, not just in
+// the readout. Set by onFire(); decays on its own.
+let fireFlashUntil=0, fireFlashColor="#3fb98a";
+function flashSkeleton(bad){
+  fireFlashUntil=performance.now()+180;
+  fireFlashColor=bad?"#e2483d":"#3fb98a";
+}
+
 function drawLandmarks(res){
   octx.clearRect(0,0,overlay.width,overlay.height);
   if(!res.multiHandLandmarks) return;
-  octx.fillStyle="#e2483d";
-  for(const lm of res.multiHandLandmarks){
-    for(const p of lm){
+  const W=overlay.width, H=overlay.height;
+  const flashing=performance.now()<fireFlashUntil;
+
+  res.multiHandLandmarks.forEach((lm,i)=>{
+    // colour per hand so two-handed seals read as two distinct skeletons
+    const label = res.multiHandedness && res.multiHandedness[i]
+      ? res.multiHandedness[i].label : "Right";
+    const base = flashing ? fireFlashColor : (label==="Left" ? "#d9a441" : "#e2483d");
+    const px = k => [lm[k].x*W, lm[k].y*H];
+
+    octx.lineWidth = flashing ? 3.5 : 2.5;
+    octx.lineCap="round";
+    octx.strokeStyle=base;
+    octx.shadowColor=base;
+    octx.shadowBlur=flashing?18:8;
+    octx.beginPath();
+    for(const [a,b] of HAND_BONES){
+      const [ax,ay]=px(a), [bx,by]=px(b);
+      octx.moveTo(ax,ay); octx.lineTo(bx,by);
+    }
+    octx.stroke();
+
+    octx.shadowBlur=0;
+    for(let k=0;k<lm.length;k++){
+      const [x,y]=px(k);
+      const tip = (k===4||k===8||k===12||k===16||k===20);
       octx.beginPath();
-      octx.arc(p.x*overlay.width,p.y*overlay.height,3,0,6.29);
+      octx.arc(x,y, k===0?4.5:(tip?3.5:2.5), 0, 6.2832);
+      octx.fillStyle = (k===0||tip) ? "#e8e2d4" : base;
       octx.fill();
     }
-  }
+  });
+  octx.shadowBlur=0;
 }
 
 async function onResults(res){
@@ -547,6 +863,7 @@ async function onResults(res){
     $("sign").textContent="—"; $("sign").className="sign idle";
     $("conf").textContent="no hands in frame";
     $("barfill").style.width="0%";
+    litCodex(-1,0);
     stab.idle();                                   // clear plateau between attempts
     frameTick();
     return;
@@ -563,6 +880,7 @@ async function onResults(res){
     $("sign").textContent="· transit ·"; $("sign").className="sign idle";
     $("conf").textContent=`in transit (${(pn*100).toFixed(1)}%)`;
     $("barfill").style.width=(pn*100)+"%";
+    litCodex(-1,0);                                // between seals: light nothing
   }else{
     let best=-1; for(let i=0;i<probs.length;i++){ if(i===NONE_IDX) continue;
       if(best<0||probs[i]>probs[best]) best=i; }
@@ -572,6 +890,7 @@ async function onResults(res){
     $("conf").textContent=`confidence ${(conf*100).toFixed(1)}%`
       + (pn>0.1 ? `  ·  transit ${(pn*100).toFixed(0)}%` : "");
     $("barfill").style.width=(conf*100)+"%";
+    litCodex(best, conf);                          // codex card follows the live read
   }
   renderRanks(probs);
 
@@ -606,6 +925,7 @@ async function start(){
     video.srcObject=stream;
     await video.play();
     overlay.width=video.videoWidth; overlay.height=video.videoHeight;
+    $("camoff").classList.add("hide");
 
     // Mirror the frame before MediaPipe sees it, to match collect.py (cv2.flip).
     // collect.py flipped the frame then ran MediaPipe, so training handedness AND
@@ -669,6 +989,7 @@ function onFire(ev){
   const f=$("fire");
   f.textContent=SIGNS[ev.sign];
   f.className="fire "+(bad?"bad":"go")+" flash";
+  flashSkeleton(bad);                            // the commit is felt on the video too
   $("fmeta").textContent=
     `p=${(ev.prob*100).toFixed(0)}%  ·  margin ${(ev.margin*100).toFixed(0)}  ·  ${ev.latency.toFixed(0)}ms`
     + (ev.wrong?"  ·  MISFIRE (out-of-set)":"");
@@ -695,6 +1016,7 @@ function renderStats(){
   const L=avg(stats.lat), I=avg(stats.inf);
   $("stLat").innerHTML = (L==null?"—":L.toFixed(0))+"<small> ms</small>";
   $("stInf").innerHTML = (I==null?"—":I.toFixed(1))+"<small> ms</small>";
+  $("hInf").textContent = (I==null?"—":I.toFixed(1));   // header badge, live
   const denom=stats.correct+stats.fls;
   $("stAcc").textContent = denom ? ((stats.correct/denom*100).toFixed(0)+"%") : "—";
   let fps=null;
@@ -741,14 +1063,14 @@ renderStats();
 //  - no attack's sequence is a prefix of another (casting is unambiguous)
 // Longer chains hit harder = reward for clean, fast weaving. Heals cost tempo.
 const ATTACKS = [
-  {name:"Fireball",       kind:"damage", amount:14, seq:["tiger","horse"]},
-  {name:"Phoenix Flower", kind:"damage", amount:20, seq:["tiger","dog","ram"]},
-  {name:"Dragon Flame",   kind:"damage", amount:30, seq:["tiger","snake","boar","ox"]},
-  {name:"Chidori",        kind:"damage", amount:24, seq:["ox","hare","monkey"]},
-  {name:"Rasengan",       kind:"damage", amount:22, seq:["dragon","ram","snake"]},
-  {name:"Water Bullet",   kind:"damage", amount:16, seq:["snake","ram","boar"]},
-  {name:"Mystic Palm",    kind:"heal",   amount:20, seq:["ram","dog","bird"]},
-  {name:"Second Chakra",  kind:"heal",   amount:14, seq:["dog","monkey","horse"]},
+  {name:"Fireball",       kanji:"火", kind:"damage", amount:14, seq:["tiger","horse"]},
+  {name:"Phoenix Flower", kanji:"鳳", kind:"damage", amount:20, seq:["tiger","dog","ram"]},
+  {name:"Dragon Flame",   kanji:"龍", kind:"damage", amount:30, seq:["tiger","snake","boar","ox"]},
+  {name:"Chidori",        kanji:"雷", kind:"damage", amount:24, seq:["ox","hare","monkey"]},
+  {name:"Rasengan",       kanji:"螺", kind:"damage", amount:22, seq:["dragon","ram","snake"]},
+  {name:"Water Bullet",   kanji:"水", kind:"damage", amount:16, seq:["snake","ram","boar"]},
+  {name:"Mystic Palm",    kanji:"掌", kind:"heal",   amount:20, seq:["ram","dog","bird"]},
+  {name:"Second Chakra",  kanji:"気", kind:"heal",   amount:14, seq:["dog","monkey","horse"]},
 ];
 
 // Consumes stabilizer fire events, tracks the in-progress sequence, and reports
@@ -841,6 +1163,7 @@ class Duel {
   }
   applyDamage(d){
     if(this.over) return;
+    hurtFx();
     this.myHp = Math.max(0, this.myHp - d);
     this.send({t:"hp", id:this.myId, hp:this.myHp});
     if(this.myHp <= 0){ this.over = true; this.result = "lose"; this.send({t:"over", id:this.myId, loser:this.myId}); }
@@ -850,6 +1173,7 @@ class Duel {
     if(!this.active || this.over) return;
     if(performance.now() < this.lockUntil) return;
     logCast(attack.name, attack.kind, "you");
+    castFx(attack.kanji || "術", attack.name, attack.kind);
     this.send({t:"cast", id:this.myId, name:attack.name, kind:attack.kind});
     if(attack.kind === "damage"){
       this.send({t:"hit", id:this.myId, dmg:attack.amount});   // victim decrements own hp
@@ -881,7 +1205,7 @@ function renderBook(){
   $("book").innerHTML = ATTACKS.map(a => {
     const chain = a.seq.map(s => `<b>${s}</b>`).join(" → ");
     const amt = a.kind === "heal" ? `+${a.amount} hp` : `${a.amount} dmg`;
-    return `<div class="a"><span class="chain">${chain}</span>`
+    return `<div class="a"><span class="chain"><span class="jk">${a.kanji||"術"}</span>${chain}</span>`
          + `<span class="amt ${a.kind === "heal" ? "heal" : "dmg"}">${amt}</span></div>`;
   }).join("");
 }
@@ -916,6 +1240,29 @@ function renderCombo(){
   c.className = "combo" + (locked ? " locked" : "");
   c.innerHTML = chain + `<span class="hint">${reach.length ? "→ " + reach.join(" / ") : "no jutsu — chain broken"}</span>`;
 }
+// The cast gets a beat over the video: kanji + name, coloured by effect.
+// Fired for YOUR casts only — an opponent's jutsu lands as HP + feed, so the
+// two are never confusable on your own screen.
+function castFx(kanji, label, kind){
+  const el=$("castfx");
+  el.querySelector(".ck").textContent=kanji;
+  el.querySelector(".cn").textContent=label;
+  el.className="castfx";            // drop .show so the animation can retrigger
+  void el.offsetWidth;              // force reflow
+  el.className="castfx show "+(kind==="heal"?"heal":"dmg");
+}
+function jutsuKanji(name){
+  const a=ATTACKS.find(x=>x.name===name);
+  return a && a.kanji ? a.kanji : "術";
+}
+// taking a hit: brief vermilion pulse on the video frame
+function hurtFx(){
+  const b=document.querySelector(".videobox");
+  if(!b) return;
+  b.classList.remove("hurt"); void b.offsetWidth; b.classList.add("hurt");
+  setTimeout(()=>b.classList.remove("hurt"),420);
+}
+
 function logCast(name, kind, who){
   const f = $("feed");
   const d = document.createElement("div"); d.className = "c " + who;
@@ -1118,6 +1465,7 @@ class Practice {
     $("pMeta").className="pmeta"+(newPb?" newpb":"");
     $("pMeta").innerHTML=`<span class="grade ${grade}">${grade}</span> · ${(per/1000).toFixed(2)}s/seal`
       + (newPb ? " · NEW BEST" : ` · best ${(pb/1000).toFixed(2)}s`);
+    castFx(this.attack.kanji || "術", `${this.attack.name} · ${grade}`, this.attack.kind);
     this.log(`${this.attack.name}`, `${(ms/1000).toFixed(2)}s · ${grade}${newPb?" ★":""}`, true);
     const again=this.attack;
     setTimeout(()=>{ if(this.active && this.attack===again) this.prompt(); }, 1200);
@@ -1174,6 +1522,7 @@ async function loadConfig(){
       $("expected").appendChild(o);
     });
     matcher = new ComboMatcher(ATTACKS);
+    renderCodex();                           // needs SIGNS + NONE_IDX, so it waits for config
   }catch(e){
     const st = $("status");
     st.className = "status err";
