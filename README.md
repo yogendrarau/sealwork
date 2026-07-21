@@ -55,7 +55,7 @@ any laptop CPU, and privacy-preserving by construction.
 collect.py        webcam data collection (12 seals + motion-gated "none" mode)
 train.py          MLP training, temporal-split eval, LOPO, class weighting
 web/
-  index.html      the whole game: recognizer, stabilizer, drills, duel
+  index.html      the whole game: recognizer, stabilizer, codex, drills, duel
   export_onnx.py  PyTorch → single-file ONNX + parity vector
   mlp.onnx        deployed model (~260KB)
 server/
@@ -87,3 +87,11 @@ python web/export_onnx.py
 - tiger↔ram confusion (~14%): the one genuinely hard pair in landmark space
 - TURN relay for the ~10–15% of NATs that defeat STUN
 - Server-authoritative duel state (HP is client-authoritative today)
+- Combat depth: today a duel is a pure race — no blocking, interrupting, or
+  resource cost, and the only failure state is the misfire stun
+
+## License
+
+[MIT](LICENSE). An unofficial fan project: Naruto and its jutsu names belong to
+Masashi Kishimoto / Shueisha, and nothing here is affiliated with or endorsed by
+them.
