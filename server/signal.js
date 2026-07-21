@@ -39,7 +39,14 @@ const server = http.createServer((req, res) => {
   res.writeHead(404, { "content-type": "text/plain" });
   res.end("not found");
 });
-const wss = new WebSocketServer({ server });
+// maxPayload: ws defaults to 100 MiB, but signaling frames are SDP and ICE
+// candidates — a few KB at most. Left at the default, a client can push 100 MiB
+// through a 512 MB container, and the relay AMPLIFIES it: received, parsed,
+// re-serialized, sent on. 64 KiB is ~10x the largest real SDP and closes it.
+// Everything else here is already bounded per connection: "create" cleans up
+// first so a socket holds at most one room, and the queue takes one entry per
+// socket, so memory tracks connection count rather than message volume.
+const wss = new WebSocketServer({ server, maxPayload: 64 * 1024 });
 
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";  // no 0/O/1/I/L lookalikes
 function newCode() {
@@ -65,7 +72,18 @@ function cleanup(ws) {
   if (ws.peer) { send(ws.peer, { t: "peer-left" }); ws.peer.peer = null; ws.peer = null; }
 }
 
+// A socket-level failure — a frame over maxPayload, a protocol violation, a
+// connection reset mid-write — emits 'error' on the WebSocket. Node treats an
+// unhandled 'error' event as fatal, so WITHOUT this listener a single bad frame
+// from one client kills the process and every duel in progress with it. Drop
+// the offending socket and carry on; cleanup runs via the 'close' that follows.
+wss.on("error", err => console.error("wss error:", err.message));
+
 wss.on("connection", ws => {
+  ws.on("error", err => {
+    console.error("socket dropped:", err.message);
+    try { ws.terminate(); } catch (e) { /* already gone */ }
+  });
   ws.on("message", raw => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     if (m.t === "create") {
@@ -85,7 +103,11 @@ wss.on("connection", ws => {
       if (other) { queue = queue.filter(w => w !== other); pair(other, ws); }
       else queue.push(ws);
     } else if (m.t === "signal") {
-      if (ws.peer) send(ws.peer, { t: "signal", data: m.data });
+      // relay only plausible handshake payloads — the peer's handleSignal
+      // expects {sdp} or {ice}, so anything else is noise or probing
+      if (ws.peer && m.data && typeof m.data === "object" && !Array.isArray(m.data)) {
+        send(ws.peer, { t: "signal", data: m.data });
+      }
     }
   });
   ws.on("close", () => cleanup(ws));

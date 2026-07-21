@@ -1,3 +1,11 @@
+# ALTERNATIVE deployment target — the live signaling server runs on
+# DigitalOcean App Platform (.do/app.yaml), reached via signal.sealwork.me.
+# Kept because Render's free tier is a legitimate choice now that the client
+# reports a cold start honestly instead of appearing to hang. If you deploy
+# here instead, point SIGNAL_URL in web/index.html at the Render hostname.
+#
+# Same constraint as DigitalOcean: ONE instance only. Rooms and the match
+# queue live in process memory — see the comment in server/signal.js.
 services:
   - type: web
     name: sealwork-signal
