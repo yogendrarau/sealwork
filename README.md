@@ -4,8 +4,8 @@ Weave the 12 Naruto hand seals at your webcam to cast jutsu. Drill combos agains
 the clock, or duel another player in real time over WebRTC — faster clean weaving
 means faster attacks, and a botched seal mid-combo costs you the cast.
 
-**Live demo:** https://yogendrarau.github.io/sealwork/ *(camera required; everything
-runs in your browser — no video ever leaves your machine)*
+**Live demo:** https://sealwork.me *(camera required; everything runs in your
+browser — no video ever leaves your machine)*
 
 ## How it works
 

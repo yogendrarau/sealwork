@@ -9,7 +9,7 @@
 <meta property="og:type" content="website" />
 <meta property="og:title" content="Sealwork — weave Naruto hand seals at your webcam" />
 <meta property="og:description" content="A 66K-parameter model reads the twelve hand seals from landmark geometry, in-browser, at ~2ms per frame. Drill combos or duel peer-to-peer." />
-<meta property="og:url" content="https://yogendrarau.github.io/sealwork/" />
+<meta property="og:url" content="https://sealwork.me/" />
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='13' fill='%230a0d12'/><text x='32' y='47' font-size='42' text-anchor='middle' fill='%23e2483d' font-family='serif'>%E5%B0%81</text></svg>" />
 <style>
@@ -1287,13 +1287,12 @@ renderBook(); renderDuel();
 // the duel runs peer-to-peer and the server is out of the loop.
 // ===================================================================
 // Local dev: node server/signal.js (port 8001). Deployed: DigitalOcean App
-// Platform, spec in .do/app.yaml. This hostname is the ONLY client-side value
-// tied to the host — point it at a CNAME you control (signal.<your-domain>)
-// and moving providers becomes a DNS change instead of a redeploy.
+// Platform, spec in .do/app.yaml — reached through a CNAME we own rather than
+// the provider's hostname, so changing hosts is a DNS edit, not a redeploy.
 const IS_LOCAL = (location.hostname==="localhost" || location.hostname==="127.0.0.1");
 const SIGNAL_URL = IS_LOCAL
   ? "ws://"+location.hostname+":8001"
-  : "wss://sealwork-signal-hfs6h.ondigitalocean.app";
+  : "wss://signal.sealwork.me";
 let sigWs=null, pc=null, dc=null;
 
 // The deployed signaling server runs on a free tier that sleeps when idle and
